@@ -23,21 +23,36 @@ const INITIAL_PETS = [
     species: 'Dog',
     breed: 'Golden Retriever',
     age: '2',
+    dateOfBirth: '',
+    sex: 'Unknown',
+    weight: '',
+    color: '',
   },
 ];
+
+const EMPTY_FORM = {
+  name: '',
+  species: '',
+  breed: '',
+  age: '',
+  dateOfBirth: '',
+  sex: 'Unknown',
+  weight: '',
+  color: '',
+};
 
 export default function App() {
   const [screen, setScreen] = useState('home');
   const [pets, setPets] = useState([]);
   const [selectedPetId, setSelectedPetId] = useState(null);
   const [petsLoaded, setPetsLoaded] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
 
-  const [name, setName] = useState('');
-  const [species, setSpecies] = useState('');
-  const [breed, setBreed] = useState('');
-  const [age, setAge] = useState('');
+  const selectedPet = pets.find(
+    (pet) => pet.id === selectedPetId
+  );
 
-  // Load pets from device storage when the app starts.
+  // Load previously saved pets.
   useEffect(() => {
     async function loadPets() {
       try {
@@ -47,12 +62,20 @@ export default function App() {
           const parsedPets = JSON.parse(savedPets);
 
           if (Array.isArray(parsedPets)) {
-            setPets(parsedPets);
+            // Add defaults for pets saved by older versions.
+            const compatiblePets = parsedPets.map((pet) => ({
+              ...pet,
+              dateOfBirth: pet.dateOfBirth || '',
+              sex: pet.sex || 'Unknown',
+              weight: pet.weight || '',
+              color: pet.color || '',
+            }));
+
+            setPets(compatiblePets);
           } else {
             setPets(INITIAL_PETS);
           }
         } else {
-          // First launch: start with the demo pet.
           setPets(INITIAL_PETS);
         }
       } catch (error) {
@@ -70,11 +93,9 @@ export default function App() {
     loadPets();
   }, []);
 
-  // Save pets whenever the list changes after loading.
+  // Save changes after the initial load has completed.
   useEffect(() => {
-    if (!petsLoaded) {
-      return;
-    }
+    if (!petsLoaded) return;
 
     async function savePets() {
       try {
@@ -94,15 +115,15 @@ export default function App() {
     savePets();
   }, [pets, petsLoaded]);
 
-  const selectedPet = pets.find(
-    (pet) => pet.id === selectedPetId
-  );
+  function updateField(field, value) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
 
   function resetForm() {
-    setName('');
-    setSpecies('');
-    setBreed('');
-    setAge('');
+    setForm(EMPTY_FORM);
   }
 
   function openAddPet() {
@@ -117,10 +138,18 @@ export default function App() {
 
   function openEditPet(pet) {
     setSelectedPetId(pet.id);
-    setName(pet.name);
-    setSpecies(pet.species);
-    setBreed(pet.breed);
-    setAge(pet.age);
+
+    setForm({
+      name: pet.name || '',
+      species: pet.species || '',
+      breed: pet.breed || '',
+      age: pet.age || '',
+      dateOfBirth: pet.dateOfBirth || '',
+      sex: pet.sex || 'Unknown',
+      weight: pet.weight || '',
+      color: pet.color || '',
+    });
+
     setScreen('editPet');
   }
 
@@ -130,28 +159,54 @@ export default function App() {
   }
 
   function savePet() {
-    if (!name.trim() || !species.trim()) {
+    if (!form.name.trim() || !form.species.trim()) {
       Alert.alert(
         'Missing Information',
-        'Please enter your pet’s name and species.'
+        'Pet name and species are required.'
       );
       return;
     }
 
+    const weightValue = form.weight.trim();
+
+    if (
+      weightValue &&
+      (!Number.isFinite(Number(weightValue)) ||
+        Number(weightValue) <= 0)
+    ) {
+      Alert.alert(
+        'Invalid Weight',
+        'Enter a weight greater than zero, in kilograms.'
+      );
+      return;
+    }
+
+    const petDetails = {
+      name: form.name.trim(),
+      species: form.species.trim(),
+      breed: form.breed.trim() || 'Not specified',
+      age: form.age.trim() || 'Not specified',
+      dateOfBirth: form.dateOfBirth.trim(),
+      sex: form.sex,
+      weight: weightValue,
+      color: form.color.trim() || 'Not specified',
+    };
+
     if (screen === 'addPet') {
       const newPet = {
         id: `${Date.now()}-${Math.random()}`,
-        name: name.trim(),
-        species: species.trim(),
-        breed: breed.trim() || 'Not specified',
-        age: age.trim() || 'Not specified',
+        ...petDetails,
       };
 
       setPets((currentPets) => [...currentPets, newPet]);
       resetForm();
       setScreen('home');
 
-      Alert.alert('Success', `${newPet.name} has been added to Sisu.`);
+      Alert.alert(
+        'Success',
+        `${newPet.name} has been added to Sisu.`
+      );
+
       return;
     }
 
@@ -159,13 +214,7 @@ export default function App() {
       setPets((currentPets) =>
         currentPets.map((pet) =>
           pet.id === selectedPetId
-            ? {
-                ...pet,
-                name: name.trim(),
-                species: species.trim(),
-                breed: breed.trim() || 'Not specified',
-                age: age.trim() || 'Not specified',
-              }
+            ? { ...pet, ...petDetails }
             : pet
         )
       );
@@ -173,12 +222,15 @@ export default function App() {
       resetForm();
       setScreen('profile');
 
-      Alert.alert('Success', 'Pet profile updated successfully.');
+      Alert.alert(
+        'Success',
+        'Pet profile updated successfully.'
+      );
     }
   }
 
-  function petEmoji(speciesName) {
-    const value = speciesName?.toLowerCase();
+  function petEmoji(species) {
+    const value = species?.toLowerCase();
 
     if (value?.includes('dog')) return '🐕';
     if (value?.includes('cat')) return '🐈';
@@ -211,7 +263,25 @@ export default function App() {
     );
   }
 
-  function renderPetForm() {
+  function renderInput(label, field, placeholder, options = {}) {
+    return (
+      <View>
+        <Text style={styles.label}>{label}</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder={placeholder}
+          placeholderTextColor="#999"
+          value={form[field]}
+          onChangeText={(value) => updateField(field, value)}
+          keyboardType={options.keyboardType || 'default'}
+          autoCapitalize={options.autoCapitalize || 'sentences'}
+        />
+      </View>
+    );
+  }
+
+  function renderForm() {
     const isEditing = screen === 'editPet';
 
     return (
@@ -229,50 +299,65 @@ export default function App() {
         </Text>
 
         <Text style={styles.subtitle}>
-          {isEditing
-            ? 'Keep your pet’s information up to date.'
-            : 'Let’s create a profile for your pet.'}
+          Tell us a little more about your companion.
         </Text>
 
         <View style={styles.formCard}>
-          <Text style={styles.label}>Pet Name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Luna"
-            placeholderTextColor="#999"
-            value={name}
-            onChangeText={setName}
-          />
+          {renderInput('Pet Name *', 'name', 'e.g. Luna')}
+          {renderInput('Species *', 'species', 'e.g. Dog or Cat')}
+          {renderInput('Breed', 'breed', 'e.g. Golden Retriever')}
+          {renderInput('Age', 'age', 'e.g. 2 years')}
 
-          <Text style={styles.label}>Species *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Dog or Cat"
-            placeholderTextColor="#999"
-            value={species}
-            onChangeText={setSpecies}
-          />
-
-          <Text style={styles.label}>Breed</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Golden Retriever"
-            placeholderTextColor="#999"
-            value={breed}
-            onChangeText={setBreed}
-          />
-
-          <Text style={styles.label}>Age</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 2 years"
-            placeholderTextColor="#999"
-            value={age}
-            onChangeText={setAge}
-          />
+          {renderInput(
+            'Date of Birth',
+            'dateOfBirth',
+            'YYYY-MM-DD',
+            { autoCapitalize: 'none' }
+          )}
 
           <Text style={styles.helper}>
-            Fields marked * are required.
+            Enter the date as YYYY-MM-DD, for example 2024-05-18.
+          </Text>
+
+          <Text style={styles.label}>Sex</Text>
+
+          <View style={styles.choiceRow}>
+            {['Male', 'Female', 'Unknown'].map((option) => (
+              <Pressable
+                key={option}
+                onPress={() => updateField('sex', option)}
+                style={[
+                  styles.choiceButton,
+                  form.sex === option && styles.choiceSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.choiceText,
+                    form.sex === option && styles.choiceTextSelected,
+                  ]}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {renderInput(
+            'Weight (kg)',
+            'weight',
+            'e.g. 4.5',
+            { keyboardType: 'decimal-pad' }
+          )}
+
+          {renderInput(
+            'Color / Markings',
+            'color',
+            'e.g. Brown with white paws'
+          )}
+
+          <Text style={styles.helper}>
+            Only pet name and species are required.
           </Text>
 
           {renderButton(
@@ -314,6 +399,7 @@ export default function App() {
           <Text style={styles.profileName}>
             {selectedPet.name}
           </Text>
+
           <Text style={styles.profileSpecies}>
             {selectedPet.species}
           </Text>
@@ -324,6 +410,26 @@ export default function App() {
           <ProfileDetail label="Species" value={selectedPet.species} />
           <ProfileDetail label="Breed" value={selectedPet.breed} />
           <ProfileDetail label="Age" value={selectedPet.age} />
+          <ProfileDetail
+            label="Date of Birth"
+            value={selectedPet.dateOfBirth || 'Not provided'}
+          />
+          <ProfileDetail
+            label="Sex"
+            value={selectedPet.sex || 'Unknown'}
+          />
+          <ProfileDetail
+            label="Weight"
+            value={
+              selectedPet.weight
+                ? `${selectedPet.weight} kg`
+                : 'Not provided'
+            }
+          />
+          <ProfileDetail
+            label="Color / Markings"
+            value={selectedPet.color || 'Not specified'}
+          />
 
           {renderButton(
             'Edit Pet Profile',
@@ -361,7 +467,7 @@ export default function App() {
             Every pet deserves{'\n'}a healthy life.
           </Text>
           <Text style={styles.welcomeDescription}>
-            Keep your pets’ information together in one place.
+            Keep your pets' information together in one place.
           </Text>
         </View>
 
@@ -406,10 +512,10 @@ export default function App() {
               <View style={styles.petInfo}>
                 <Text style={styles.petName}>{pet.name}</Text>
                 <Text style={styles.petDescription}>
-                  {pet.breed}
+                  {pet.breed || 'Breed not specified'}
                 </Text>
                 <Text style={styles.petAge}>
-                  {pet.species} · {pet.age}
+                  {pet.species} · {pet.age || 'Age not provided'}
                 </Text>
               </View>
 
@@ -423,38 +529,23 @@ export default function App() {
           More ways to care for your pets
         </Text>
 
-        <View style={styles.featureCard}>
-          <Text style={styles.featureEmoji}>🩺</Text>
-          <View style={styles.featureInfo}>
-            <Text style={styles.featureTitle}>Health Records</Text>
-            <Text style={styles.featureDescription}>
-              Keep track of treatments and medical history.
-            </Text>
-            <Text style={styles.comingSoon}>COMING SOON</Text>
-          </View>
-        </View>
+        <FeatureCard
+          emoji="🩺"
+          title="Health Records"
+          description="Keep track of treatments and medical history."
+        />
 
-        <View style={styles.featureCard}>
-          <Text style={styles.featureEmoji}>💉</Text>
-          <View style={styles.featureInfo}>
-            <Text style={styles.featureTitle}>Vaccinations</Text>
-            <Text style={styles.featureDescription}>
-              Organize vaccination records and due dates.
-            </Text>
-            <Text style={styles.comingSoon}>COMING SOON</Text>
-          </View>
-        </View>
+        <FeatureCard
+          emoji="💉"
+          title="Vaccinations"
+          description="Organize vaccination records and due dates."
+        />
 
-        <View style={styles.featureCard}>
-          <Text style={styles.featureEmoji}>🏥</Text>
-          <View style={styles.featureInfo}>
-            <Text style={styles.featureTitle}>Find a Veterinarian</Text>
-            <Text style={styles.featureDescription}>
-              Discover veterinary care for your companions.
-            </Text>
-            <Text style={styles.comingSoon}>COMING SOON</Text>
-          </View>
-        </View>
+        <FeatureCard
+          emoji="🏥"
+          title="Find a Veterinarian"
+          description="Discover veterinary care for your companions."
+        />
 
         <Text style={styles.footer}>
           Made with care for every paw. 🐾
@@ -469,20 +560,23 @@ export default function App() {
         <StatusBar barStyle="dark-content" />
         <Text style={styles.logo}>sisu</Text>
         <ActivityIndicator size="large" color="#267A60" />
-        <Text style={styles.loadingText}>
-          Loading your pets...
-        </Text>
+        <Text style={styles.loadingText}>Loading your pets...</Text>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.app}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F7F8F4" />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#F7F8F4"
+      />
 
       {screen === 'home' && renderHome()}
+
       {(screen === 'addPet' || screen === 'editPet') &&
-        renderPetForm()}
+        renderForm()}
+
       {screen === 'profile' && renderProfile()}
     </SafeAreaView>
   );
@@ -492,7 +586,22 @@ function ProfileDetail({ label, value }) {
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value || 'Not specified'}</Text>
+      <Text style={styles.detailValue}>
+        {value || 'Not specified'}
+      </Text>
+    </View>
+  );
+}
+
+function FeatureCard({ emoji, title, description }) {
+  return (
+    <View style={styles.featureCard}>
+      <Text style={styles.featureEmoji}>{emoji}</Text>
+      <View style={styles.featureInfo}>
+        <Text style={styles.featureTitle}>{title}</Text>
+        <Text style={styles.featureDescription}>{description}</Text>
+        <Text style={styles.comingSoon}>COMING SOON</Text>
+      </View>
     </View>
   );
 }
@@ -756,7 +865,34 @@ const styles = StyleSheet.create({
   helper: {
     color: '#78837C',
     fontSize: 12,
+    lineHeight: 18,
     marginBottom: 16,
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  choiceButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#DFE7DF',
+    backgroundColor: '#F8FAF7',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  choiceSelected: {
+    backgroundColor: '#267A60',
+    borderColor: '#267A60',
+  },
+  choiceText: {
+    color: '#34483B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  choiceTextSelected: {
+    color: '#FFFFFF',
   },
   button: {
     backgroundColor: '#267A60',
