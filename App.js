@@ -18,6 +18,7 @@ import RecordDetail from './src/components/health/RecordDetail';
 import PetCard from './src/components/pets/PetCard';
 import ReminderCard from './src/components/reminders/ReminderCard';
 import AppButton from './src/components/common/AppButton';
+import AppInput from './src/components/common/AppInput';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -658,80 +659,61 @@ export default function App() {
   );
 }
 
-  function renderPetInput(
-    label,
-    field,
-    placeholder,
-    keyboardType = 'default'
-  ) {
-    return (
-      <View style={styles.inputGroup} key={field}>
-        <Text style={styles.inputLabel}>{label}</Text>
-        <TextInput
-          style={styles.input}
-          value={String(petForm[field] ?? '')}
-          onChangeText={(value) => updatePetForm(field, value)}
-          placeholder={placeholder}
-          keyboardType={keyboardType}
-          placeholderTextColor="#98A2B3"
-        />
-      </View>
-    );
-  }
+ function renderPetInput(
+  label,
+  field,
+  placeholder,
+  keyboardType = 'default'
+) {
+  return (
+    <AppInput
+      key={field}
+      label={label}
+      value={petForm[field]}
+      onChangeText={(value) => updatePetForm(field, value)}
+      placeholder={placeholder}
+      keyboardType={keyboardType}
+    />
+  );
+}
 
-  function renderHealthInput(
-    label,
-    field,
-    placeholder,
-    multiline = false
-  ) {
-    return (
-      <View style={styles.inputGroup} key={field}>
-        <Text style={styles.inputLabel}>{label}</Text>
-        <TextInput
-          style={[
-            styles.input,
-            multiline && styles.multilineInput,
-          ]}
-          value={healthForm[field] || ''}
-          onChangeText={(value) =>
-            updateHealthForm(field, value)
-          }
-          placeholder={placeholder}
-          placeholderTextColor="#98A2B3"
-          multiline={multiline}
-          textAlignVertical={multiline ? 'top' : 'center'}
-        />
-      </View>
-    );
-  }
+function renderHealthInput(
+  label,
+  field,
+  placeholder,
+  multiline = false
+) {
+  return (
+    <AppInput
+      key={field}
+      label={label}
+      value={healthForm[field]}
+      onChangeText={(value) => updateHealthForm(field, value)}
+      placeholder={placeholder}
+      multiline={multiline}
+    />
+  );
+}
 
-  function renderVaccinationInput(
-    label,
-    field,
-    placeholder,
-    multiline = false
-  ) {
-    return (
-      <View style={styles.inputGroup} key={field}>
-        <Text style={styles.inputLabel}>{label}</Text>
-        <TextInput
-          style={[
-            styles.input,
-            multiline && styles.multilineInput,
-          ]}
-          value={vaccinationForm[field] || ''}
-          onChangeText={(value) =>
-            updateVaccinationForm(field, value)
-          }
-          placeholder={placeholder}
-          placeholderTextColor="#98A2B3"
-          multiline={multiline}
-          textAlignVertical={multiline ? 'top' : 'center'}
-        />
-      </View>
-    );
-  }
+ function renderVaccinationInput(
+  label,
+  field,
+  placeholder,
+  multiline = false
+) {
+  return (
+    <AppInput
+      key={field}
+      label={label}
+      value={vaccinationForm[field]}
+      onChangeText={(value) =>
+        updateVaccinationForm(field, value)
+      }
+      placeholder={placeholder}
+      multiline={multiline}
+    />
+  );
+}
 
   function petEmoji(species) {
     const value = (species || '').toLowerCase();
@@ -1640,30 +1622,6 @@ const styles = StyleSheet.create({
     borderColor: '#E7EEEA',
   },
 
-  inputGroup: {
-    marginBottom: 15,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#344054',
-    marginBottom: 7,
-  },
-  input: {
-    minHeight: 47,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    borderWidth: 1,
-    borderColor: '#D0D5DD',
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    color: '#101828',
-    fontSize: 14,
-  },
-  multilineInput: {
-    minHeight: 100,
-    paddingTop: 12,
-  },
   helperText: {
     fontSize: 12,
     lineHeight: 19,
