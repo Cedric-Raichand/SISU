@@ -27,10 +27,11 @@ const INITIAL_PETS = [
     sex: 'Unknown',
     weight: '',
     color: '',
+    healthRecords: [],
   },
 ];
 
-const EMPTY_FORM = {
+const EMPTY_PET_FORM = {
   name: '',
   species: '',
   breed: '',
@@ -41,18 +42,38 @@ const EMPTY_FORM = {
   color: '',
 };
 
+const EMPTY_HEALTH_FORM = {
+  date: '',
+  reason: '',
+  diagnosis: '',
+  treatment: '',
+  medication: '',
+  veterinarian: '',
+  notes: '',
+};
+
 export default function App() {
   const [screen, setScreen] = useState('home');
   const [pets, setPets] = useState([]);
-  const [selectedPetId, setSelectedPetId] = useState(null);
   const [petsLoaded, setPetsLoaded] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+
+  const [selectedPetId, setSelectedPetId] = useState(null);
+  const [selectedRecordId, setSelectedRecordId] = useState(null);
+
+  const [petForm, setPetForm] = useState(EMPTY_PET_FORM);
+  const [healthForm, setHealthForm] = useState(EMPTY_HEALTH_FORM);
 
   const selectedPet = pets.find(
     (pet) => pet.id === selectedPetId
   );
 
-  // Load previously saved pets.
+  const healthRecords = selectedPet?.healthRecords || [];
+
+  const selectedRecord = healthRecords.find(
+    (record) => record.id === selectedRecordId
+  );
+
+  // Load pets and their health records from local storage.
   useEffect(() => {
     async function loadPets() {
       try {
@@ -62,13 +83,15 @@ export default function App() {
           const parsedPets = JSON.parse(savedPets);
 
           if (Array.isArray(parsedPets)) {
-            // Add defaults for pets saved by older versions.
             const compatiblePets = parsedPets.map((pet) => ({
               ...pet,
               dateOfBirth: pet.dateOfBirth || '',
               sex: pet.sex || 'Unknown',
               weight: pet.weight || '',
               color: pet.color || '',
+              healthRecords: Array.isArray(pet.healthRecords)
+                ? pet.healthRecords
+                : [],
             }));
 
             setPets(compatiblePets);
@@ -93,7 +116,7 @@ export default function App() {
     loadPets();
   }, []);
 
-  // Save changes after the initial load has completed.
+  // Save pet profiles and their health records.
   useEffect(() => {
     if (!petsLoaded) return;
 
@@ -107,7 +130,7 @@ export default function App() {
         console.error('Error saving pets:', error);
         Alert.alert(
           'Save Error',
-          'Your pet information could not be saved.'
+          'Your information could not be saved.'
         );
       }
     }
@@ -115,19 +138,39 @@ export default function App() {
     savePets();
   }, [pets, petsLoaded]);
 
-  function updateField(field, value) {
-    setForm((current) => ({
+  // ---------------- PET PROFILE FUNCTIONS ----------------
+
+  function updatePetField(field, value) {
+    setPetForm((current) => ({
       ...current,
       [field]: value,
     }));
   }
 
-  function resetForm() {
-    setForm(EMPTY_FORM);
+  function updateHealthField(field, value) {
+    setHealthForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function resetPetForm() {
+    setPetForm(EMPTY_PET_FORM);
+  }
+
+  function resetHealthForm() {
+    setHealthForm(EMPTY_HEALTH_FORM);
+    setSelectedRecordId(null);
+  }
+
+  function goHome() {
+    resetPetForm();
+    resetHealthForm();
+    setScreen('home');
   }
 
   function openAddPet() {
-    resetForm();
+    resetPetForm();
     setScreen('addPet');
   }
 
@@ -139,7 +182,7 @@ export default function App() {
   function openEditPet(pet) {
     setSelectedPetId(pet.id);
 
-    setForm({
+    setPetForm({
       name: pet.name || '',
       species: pet.species || '',
       breed: pet.breed || '',
@@ -153,13 +196,8 @@ export default function App() {
     setScreen('editPet');
   }
 
-  function goHome() {
-    resetForm();
-    setScreen('home');
-  }
-
   function savePet() {
-    if (!form.name.trim() || !form.species.trim()) {
+    if (!petForm.name.trim() || !petForm.species.trim()) {
       Alert.alert(
         'Missing Information',
         'Pet name and species are required.'
@@ -167,12 +205,11 @@ export default function App() {
       return;
     }
 
-    const weightValue = form.weight.trim();
+    const weight = petForm.weight.trim();
 
     if (
-      weightValue &&
-      (!Number.isFinite(Number(weightValue)) ||
-        Number(weightValue) <= 0)
+      weight &&
+      (!Number.isFinite(Number(weight)) || Number(weight) <= 0)
     ) {
       Alert.alert(
         'Invalid Weight',
@@ -182,44 +219,44 @@ export default function App() {
     }
 
     const petDetails = {
-      name: form.name.trim(),
-      species: form.species.trim(),
-      breed: form.breed.trim() || 'Not specified',
-      age: form.age.trim() || 'Not specified',
-      dateOfBirth: form.dateOfBirth.trim(),
-      sex: form.sex,
-      weight: weightValue,
-      color: form.color.trim() || 'Not specified',
+      name: petForm.name.trim(),
+      species: petForm.species.trim(),
+      breed: petForm.breed.trim() || 'Not specified',
+      age: petForm.age.trim() || 'Not specified',
+      dateOfBirth: petForm.dateOfBirth.trim(),
+      sex: petForm.sex,
+      weight,
+      color: petForm.color.trim() || 'Not specified',
     };
 
     if (screen === 'addPet') {
       const newPet = {
         id: `${Date.now()}-${Math.random()}`,
         ...petDetails,
+        healthRecords: [],
       };
 
-      setPets((currentPets) => [...currentPets, newPet]);
-      resetForm();
+      setPets((current) => [...current, newPet]);
+      resetPetForm();
       setScreen('home');
 
       Alert.alert(
         'Success',
         `${newPet.name} has been added to Sisu.`
       );
-
       return;
     }
 
     if (screen === 'editPet' && selectedPetId) {
-      setPets((currentPets) =>
-        currentPets.map((pet) =>
+      setPets((current) =>
+        current.map((pet) =>
           pet.id === selectedPetId
             ? { ...pet, ...petDetails }
             : pet
         )
       );
 
-      resetForm();
+      resetPetForm();
       setScreen('profile');
 
       Alert.alert(
@@ -229,18 +266,197 @@ export default function App() {
     }
   }
 
-  function petEmoji(species) {
-    const value = species?.toLowerCase();
+  // ---------------- HEALTH RECORD FUNCTIONS ----------------
 
-    if (value?.includes('dog')) return '🐕';
-    if (value?.includes('cat')) return '🐈';
-    if (value?.includes('bird')) return '🐦';
-    if (value?.includes('rabbit')) return '🐇';
-    if (value?.includes('fish')) return '🐟';
-    if (value?.includes('turtle')) return '🐢';
-
-    return '🐾';
+  function openHealthRecords(pet) {
+    setSelectedPetId(pet.id);
+    resetHealthForm();
+    setScreen('healthRecords');
   }
+
+  function openAddHealthRecord() {
+    resetHealthForm();
+
+    // Use today's date as a convenient starting value.
+    const today = new Date();
+    const localDate = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    setHealthForm({
+      ...EMPTY_HEALTH_FORM,
+      date: localDate,
+    });
+
+    setScreen('addHealthRecord');
+  }
+
+  function openEditHealthRecord(record) {
+    setSelectedRecordId(record.id);
+
+    setHealthForm({
+      date: record.date || '',
+      reason: record.reason || '',
+      diagnosis: record.diagnosis || '',
+      treatment: record.treatment || '',
+      medication: record.medication || '',
+      veterinarian: record.veterinarian || '',
+      notes: record.notes || '',
+    });
+
+    setScreen('editHealthRecord');
+  }
+
+  function saveHealthRecord() {
+    if (!selectedPetId) {
+      Alert.alert('Error', 'Please select a pet first.');
+      return;
+    }
+
+    if (!healthForm.date.trim() || !healthForm.reason.trim()) {
+      Alert.alert(
+        'Missing Information',
+        'Visit date and reason are required.'
+      );
+      return;
+    }
+
+    // Validate YYYY-MM-DD and reject impossible calendar dates.
+    const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const match = healthForm.date.trim().match(datePattern);
+
+    if (!match) {
+      Alert.alert(
+        'Invalid Date',
+        'Enter the date in YYYY-MM-DD format.'
+      );
+      return;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const parsedDate = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      parsedDate.getUTCFullYear() !== year ||
+      parsedDate.getUTCMonth() !== month - 1 ||
+      parsedDate.getUTCDate() !== day
+    ) {
+      Alert.alert(
+        'Invalid Date',
+        'Please enter a real calendar date.'
+      );
+      return;
+    }
+
+    const recordDetails = {
+      date: healthForm.date.trim(),
+      reason: healthForm.reason.trim(),
+      diagnosis: healthForm.diagnosis.trim(),
+      treatment: healthForm.treatment.trim(),
+      medication: healthForm.medication.trim(),
+      veterinarian: healthForm.veterinarian.trim(),
+      notes: healthForm.notes.trim(),
+    };
+
+    if (screen === 'addHealthRecord') {
+      const newRecord = {
+        id: `${Date.now()}-${Math.random()}`,
+        ...recordDetails,
+        createdAt: new Date().toISOString(),
+      };
+
+      setPets((current) =>
+        current.map((pet) =>
+          pet.id === selectedPetId
+            ? {
+                ...pet,
+                healthRecords: [
+                  ...(pet.healthRecords || []),
+                  newRecord,
+                ],
+              }
+            : pet
+        )
+      );
+
+      resetHealthForm();
+      setScreen('healthRecords');
+
+      Alert.alert(
+        'Success',
+        'Health record added successfully.'
+      );
+      return;
+    }
+
+    if (screen === 'editHealthRecord' && selectedRecordId) {
+      setPets((current) =>
+        current.map((pet) => {
+          if (pet.id !== selectedPetId) return pet;
+
+          return {
+            ...pet,
+            healthRecords: (pet.healthRecords || []).map(
+              (record) =>
+                record.id === selectedRecordId
+                  ? { ...record, ...recordDetails }
+                  : record
+            ),
+          };
+        })
+      );
+
+      resetHealthForm();
+      setScreen('healthRecords');
+
+      Alert.alert(
+        'Success',
+        'Health record updated successfully.'
+      );
+    }
+  }
+
+  function deleteHealthRecord(recordId) {
+    Alert.alert(
+      'Delete Health Record',
+      'Are you sure you want to delete this medical record?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setPets((current) =>
+              current.map((pet) =>
+                pet.id === selectedPetId
+                  ? {
+                      ...pet,
+                      healthRecords: (
+                        pet.healthRecords || []
+                      ).filter((record) => record.id !== recordId),
+                    }
+                  : pet
+              )
+            );
+
+            Alert.alert(
+              'Deleted',
+              'Health record deleted successfully.'
+            );
+          },
+        },
+      ]
+    );
+  }
+
+  // ---------------- REUSABLE UI ----------------
 
   function renderButton(label, onPress, secondary = false) {
     return (
@@ -263,17 +479,21 @@ export default function App() {
     );
   }
 
-  function renderInput(label, field, placeholder, options = {}) {
+  function renderPetInput(
+    label,
+    field,
+    placeholder,
+    options = {}
+  ) {
     return (
       <View>
         <Text style={styles.label}>{label}</Text>
-
         <TextInput
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor="#999"
-          value={form[field]}
-          onChangeText={(value) => updateField(field, value)}
+          value={petForm[field]}
+          onChangeText={(value) => updatePetField(field, value)}
           keyboardType={options.keyboardType || 'default'}
           autoCapitalize={options.autoCapitalize || 'sentences'}
         />
@@ -281,7 +501,50 @@ export default function App() {
     );
   }
 
-  function renderForm() {
+  function renderHealthInput(
+    label,
+    field,
+    placeholder,
+    multiline = false
+  ) {
+    return (
+      <View>
+        <Text style={styles.label}>{label}</Text>
+        <TextInput
+          style={[
+            styles.input,
+            multiline && styles.multilineInput,
+          ]}
+          placeholder={placeholder}
+          placeholderTextColor="#999"
+          value={healthForm[field]}
+          onChangeText={(value) =>
+            updateHealthField(field, value)
+          }
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          autoCapitalize="sentences"
+        />
+      </View>
+    );
+  }
+
+  function petEmoji(species) {
+    const value = species?.toLowerCase();
+
+    if (value?.includes('dog')) return '🐕';
+    if (value?.includes('cat')) return '🐈';
+    if (value?.includes('bird')) return '🐦';
+    if (value?.includes('rabbit')) return '🐇';
+    if (value?.includes('fish')) return '🐟';
+    if (value?.includes('turtle')) return '🐢';
+
+    return '🐾';
+  }
+
+  // ---------------- PET FORM ----------------
+
+  function renderPetForm() {
     const isEditing = screen === 'editPet';
 
     return (
@@ -303,12 +566,19 @@ export default function App() {
         </Text>
 
         <View style={styles.formCard}>
-          {renderInput('Pet Name *', 'name', 'e.g. Luna')}
-          {renderInput('Species *', 'species', 'e.g. Dog or Cat')}
-          {renderInput('Breed', 'breed', 'e.g. Golden Retriever')}
-          {renderInput('Age', 'age', 'e.g. 2 years')}
-
-          {renderInput(
+          {renderPetInput('Pet Name *', 'name', 'e.g. Luna')}
+          {renderPetInput(
+            'Species *',
+            'species',
+            'e.g. Dog or Cat'
+          )}
+          {renderPetInput(
+            'Breed',
+            'breed',
+            'e.g. Golden Retriever'
+          )}
+          {renderPetInput('Age', 'age', 'e.g. 2 years')}
+          {renderPetInput(
             'Date of Birth',
             'dateOfBirth',
             'YYYY-MM-DD',
@@ -316,25 +586,25 @@ export default function App() {
           )}
 
           <Text style={styles.helper}>
-            Enter the date as YYYY-MM-DD, for example 2024-05-18.
+            Date format: YYYY-MM-DD.
           </Text>
 
           <Text style={styles.label}>Sex</Text>
-
           <View style={styles.choiceRow}>
             {['Male', 'Female', 'Unknown'].map((option) => (
               <Pressable
                 key={option}
-                onPress={() => updateField('sex', option)}
+                onPress={() => updatePetField('sex', option)}
                 style={[
                   styles.choiceButton,
-                  form.sex === option && styles.choiceSelected,
+                  petForm.sex === option && styles.choiceSelected,
                 ]}
               >
                 <Text
                   style={[
                     styles.choiceText,
-                    form.sex === option && styles.choiceTextSelected,
+                    petForm.sex === option &&
+                      styles.choiceTextSelected,
                   ]}
                 >
                   {option}
@@ -343,14 +613,14 @@ export default function App() {
             ))}
           </View>
 
-          {renderInput(
+          {renderPetInput(
             'Weight (kg)',
             'weight',
             'e.g. 4.5',
             { keyboardType: 'decimal-pad' }
           )}
 
-          {renderInput(
+          {renderPetInput(
             'Color / Markings',
             'color',
             'e.g. Brown with white paws'
@@ -364,12 +634,13 @@ export default function App() {
             isEditing ? 'Save Changes' : 'Add Pet',
             savePet
           )}
-
           {renderButton('Cancel', goHome, true)}
         </View>
       </ScrollView>
     );
   }
+
+  // ---------------- PET PROFILE ----------------
 
   function renderProfile() {
     if (!selectedPet) {
@@ -399,7 +670,6 @@ export default function App() {
           <Text style={styles.profileName}>
             {selectedPet.name}
           </Text>
-
           <Text style={styles.profileSpecies}>
             {selectedPet.species}
           </Text>
@@ -432,8 +702,14 @@ export default function App() {
           />
 
           {renderButton(
+            '🩺 View Health Records',
+            () => openHealthRecords(selectedPet)
+          )}
+
+          {renderButton(
             'Edit Pet Profile',
-            () => openEditPet(selectedPet)
+            () => openEditPet(selectedPet),
+            true
           )}
 
           {renderButton('Back to Home', goHome, true)}
@@ -441,6 +717,211 @@ export default function App() {
       </ScrollView>
     );
   }
+
+  // ---------------- HEALTH RECORD LIST ----------------
+
+  function renderHealthRecords() {
+    if (!selectedPet) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.heading}>Pet not found</Text>
+          {renderButton('Back to Home', goHome)}
+        </View>
+      );
+    }
+
+    const sortedRecords = [...healthRecords].sort((a, b) =>
+      (b.date || '').localeCompare(a.date || '')
+    );
+
+    return (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.eyebrow}>MEDICAL HISTORY</Text>
+        <Text style={styles.heading}>Health Records</Text>
+        <Text style={styles.subtitle}>
+          Medical history for {selectedPet.name}.
+        </Text>
+
+        {renderButton(
+          '+ Add Health Record',
+          openAddHealthRecord
+        )}
+
+        {sortedRecords.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>🩺</Text>
+            <Text style={styles.emptyTitle}>
+              No health records yet
+            </Text>
+            <Text style={styles.emptyDescription}>
+              Add a veterinary visit or medical record for{' '}
+              {selectedPet.name}.
+            </Text>
+          </View>
+        ) : (
+          sortedRecords.map((record) => (
+            <View key={record.id} style={styles.recordCard}>
+              <View style={styles.recordHeader}>
+                <View style={styles.recordDateBadge}>
+                  <Text style={styles.recordDateText}>
+                    {record.date}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.recordTitle}>
+                {record.reason}
+              </Text>
+
+              <RecordDetail
+                label="Diagnosis"
+                value={record.diagnosis}
+              />
+              <RecordDetail
+                label="Treatment"
+                value={record.treatment}
+              />
+              <RecordDetail
+                label="Medication"
+                value={record.medication}
+              />
+              <RecordDetail
+                label="Veterinarian"
+                value={record.veterinarian}
+              />
+              <RecordDetail
+                label="Notes"
+                value={record.notes}
+              />
+
+              <View style={styles.recordActions}>
+                <Pressable
+                  style={styles.smallButton}
+                  onPress={() => openEditHealthRecord(record)}
+                >
+                  <Text style={styles.smallButtonText}>Edit</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.smallButton,
+                    styles.deleteButton,
+                  ]}
+                  onPress={() => deleteHealthRecord(record.id)}
+                >
+                  <Text style={styles.deleteButtonText}>
+                    Delete
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ))
+        )}
+
+        {renderButton(
+          'Back to Pet Profile',
+          () => setScreen('profile'),
+          true
+        )}
+      </ScrollView>
+    );
+  }
+
+  // ---------------- ADD / EDIT HEALTH RECORD FORM ----------------
+
+  function renderHealthForm() {
+    const isEditing = screen === 'editHealthRecord';
+
+    return (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.eyebrow}>MEDICAL HISTORY</Text>
+
+        <Text style={styles.heading}>
+          {isEditing ? 'Edit Health Record' : 'New Health Record'}
+        </Text>
+
+        <Text style={styles.subtitle}>
+          {selectedPet
+            ? `Record a visit or treatment for ${selectedPet.name}.`
+            : 'Record a veterinary visit.'}
+        </Text>
+
+        <View style={styles.formCard}>
+          {renderHealthInput(
+            'Visit Date * (YYYY-MM-DD)',
+            'date',
+            'e.g. 2026-10-09'
+          )}
+
+          {renderHealthInput(
+            'Reason for Visit *',
+            'reason',
+            'e.g. Annual check-up'
+          )}
+
+          {renderHealthInput(
+            'Diagnosis',
+            'diagnosis',
+            'Diagnosis provided by the veterinarian',
+            true
+          )}
+
+          {renderHealthInput(
+            'Treatment',
+            'treatment',
+            'Treatment or procedure performed',
+            true
+          )}
+
+          {renderHealthInput(
+            'Medication',
+            'medication',
+            'Medication and dosage, if prescribed',
+            true
+          )}
+
+          {renderHealthInput(
+            'Veterinarian',
+            'veterinarian',
+            'Veterinarian or clinic name'
+          )}
+
+          {renderHealthInput(
+            'Veterinarian Notes',
+            'notes',
+            'Additional observations or instructions',
+            true
+          )}
+
+          <Text style={styles.helper}>
+            Visit date and reason are required. Only record
+            diagnoses and treatments provided by a qualified
+            veterinary professional.
+          </Text>
+
+          {renderButton(
+            isEditing ? 'Save Changes' : 'Save Health Record',
+            saveHealthRecord
+          )}
+
+          {renderButton(
+            'Cancel',
+            () => setScreen('healthRecords'),
+            true
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // ---------------- HOME DASHBOARD ----------------
 
   function renderHome() {
     return (
@@ -517,6 +998,9 @@ export default function App() {
                 <Text style={styles.petAge}>
                   {pet.species} · {pet.age || 'Age not provided'}
                 </Text>
+                <Text style={styles.recordCount}>
+                  {(pet.healthRecords || []).length} health record(s)
+                </Text>
               </View>
 
               <Text style={styles.chevron}>›</Text>
@@ -532,7 +1016,7 @@ export default function App() {
         <FeatureCard
           emoji="🩺"
           title="Health Records"
-          description="Keep track of treatments and medical history."
+          description="Keep track of veterinary visits and medical history."
         />
 
         <FeatureCard
@@ -553,6 +1037,8 @@ export default function App() {
       </ScrollView>
     );
   }
+
+  // ---------------- APP RENDER ----------------
 
   if (!petsLoaded) {
     return (
@@ -575,12 +1061,20 @@ export default function App() {
       {screen === 'home' && renderHome()}
 
       {(screen === 'addPet' || screen === 'editPet') &&
-        renderForm()}
+        renderPetForm()}
 
       {screen === 'profile' && renderProfile()}
+
+      {screen === 'healthRecords' && renderHealthRecords()}
+
+      {(screen === 'addHealthRecord' ||
+        screen === 'editHealthRecord') &&
+        renderHealthForm()}
     </SafeAreaView>
   );
 }
+
+// ---------------- REUSABLE COMPONENTS ----------------
 
 function ProfileDetail({ label, value }) {
   return (
@@ -589,6 +1083,17 @@ function ProfileDetail({ label, value }) {
       <Text style={styles.detailValue}>
         {value || 'Not specified'}
       </Text>
+    </View>
+  );
+}
+
+function RecordDetail({ label, value }) {
+  if (!value) return null;
+
+  return (
+    <View style={styles.recordDetail}>
+      <Text style={styles.recordDetailLabel}>{label}</Text>
+      <Text style={styles.recordDetailValue}>{value}</Text>
     </View>
   );
 }
@@ -605,6 +1110,8 @@ function FeatureCard({ emoji, title, description }) {
     </View>
   );
 }
+
+// ---------------- STYLES ----------------
 
 const styles = StyleSheet.create({
   app: {
@@ -754,6 +1261,12 @@ const styles = StyleSheet.create({
     color: '#89938D',
     fontSize: 12,
   },
+  recordCount: {
+    color: '#267A60',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 5,
+  },
   chevron: {
     fontSize: 28,
     color: '#8B9A90',
@@ -764,7 +1277,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 24,
-    marginBottom: 28,
+    marginVertical: 18,
     borderWidth: 1,
     borderColor: '#E9EDE8',
   },
@@ -844,6 +1357,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#E9EDE8',
+    marginTop: 14,
   },
   label: {
     color: '#34483B',
@@ -861,6 +1375,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#20372C',
     marginBottom: 18,
+  },
+  multilineInput: {
+    minHeight: 90,
+    paddingTop: 12,
   },
   helper: {
     color: '#78837C',
@@ -898,6 +1416,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#267A60',
     borderRadius: 12,
     paddingVertical: 15,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
@@ -971,6 +1490,77 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     flexShrink: 1,
     textAlign: 'right',
+  },
+  recordCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E9EDE8',
+    marginBottom: 14,
+  },
+  recordHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginBottom: 12,
+  },
+  recordDateBadge: {
+    backgroundColor: '#EAF3EC',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  recordDateText: {
+    color: '#267A60',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  recordTitle: {
+    color: '#20372C',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  recordDetail: {
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2EE',
+  },
+  recordDetailLabel: {
+    color: '#78837C',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  recordDetailValue: {
+    color: '#34483B',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  recordActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  smallButton: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#EAF1EB',
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  smallButtonText: {
+    color: '#267A60',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  deleteButton: {
+    backgroundColor: '#FCEBE8',
+  },
+  deleteButtonText: {
+    color: '#B42318',
+    fontSize: 13,
+    fontWeight: '800',
   },
   centered: {
     flex: 1,
