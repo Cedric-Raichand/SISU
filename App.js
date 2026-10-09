@@ -25,14 +25,87 @@ export default function App() {
     },
   ]);
 
+  const [selectedPetId, setSelectedPetId] = useState(null);
+
   const [name, setName] = useState('');
   const [species, setSpecies] = useState('');
   const [breed, setBreed] = useState('');
   const [age, setAge] = useState('');
 
-  function handleAddPet() {
+  const selectedPet = pets.find(
+    (pet) => pet.id === selectedPetId
+  );
+
+  function openAddPet() {
+    setName('');
+    setSpecies('');
+    setBreed('');
+    setAge('');
+    setScreen('addPet');
+  }
+
+  function openPetProfile(pet) {
+    setSelectedPetId(pet.id);
+    setScreen('profile');
+  }
+
+  function openEditPet() {
+    if (!selectedPet) return;
+
+    setName(selectedPet.name);
+    setSpecies(selectedPet.species);
+    setBreed(
+      selectedPet.breed === 'Unknown breed'
+        ? ''
+        : selectedPet.breed
+    );
+    setAge(
+      selectedPet.age === 'Not specified'
+        ? ''
+        : selectedPet.age
+    );
+
+    setScreen('editPet');
+  }
+
+  function savePet() {
     if (!name.trim() || !species.trim()) {
-      Alert.alert('Missing information', 'Please enter your pet’s name and species.');
+      Alert.alert(
+        'Missing information',
+        "Please enter your pet's name and species."
+      );
+      return;
+    }
+
+    if (
+      age.trim() &&
+      (!Number.isFinite(Number(age)) || Number(age) < 0)
+    ) {
+      Alert.alert(
+        'Invalid age',
+        'Please enter a valid age of zero or greater.'
+      );
+      return;
+    }
+
+    if (screen === 'editPet') {
+      setPets((currentPets) =>
+        currentPets.map((pet) =>
+          pet.id === selectedPetId
+            ? {
+                ...pet,
+                name: name.trim(),
+                species: species.trim(),
+                breed: breed.trim() || 'Unknown breed',
+                age: age.trim() || 'Not specified',
+              }
+            : pet
+        )
+      );
+
+      setScreen('profile');
+
+      Alert.alert('Updated!', 'Your pet profile has been updated.');
       return;
     }
 
@@ -45,240 +118,300 @@ export default function App() {
     };
 
     setPets((currentPets) => [...currentPets, newPet]);
-
-    setName('');
-    setSpecies('');
-    setBreed('');
-    setAge('');
-
-    setScreen('home');
+    setSelectedPetId(newPet.id);
+    setScreen('profile');
 
     Alert.alert('Success!', `${newPet.name} has been added to Sisu.`);
   }
 
-  function handleOpenAddPet() {
-    setScreen('addPet');
+  function petEmoji(speciesName) {
+    const value = speciesName.toLowerCase();
+
+    if (value.includes('cat')) return '🐈';
+    if (value.includes('dog')) return '🐕';
+    if (value.includes('bird')) return '🐦';
+    if (value.includes('rabbit')) return '🐇';
+    if (value.includes('fish')) return '🐠';
+
+    return '🐾';
   }
 
-  function handleGoHome() {
+  function goHome() {
     setScreen('home');
+  }
+
+  function renderPetForm(isEditing) {
+    return (
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.formContainer}
+      >
+        <Pressable onPress={() => setScreen(isEditing ? 'profile' : 'home')}>
+          <Text style={styles.backButton}>
+            ‹ {isEditing ? 'Back to profile' : 'Back to home'}
+          </Text>
+        </Pressable>
+
+        <Text style={styles.formEmoji}>
+          {isEditing ? '✏️' : '🐾'}
+        </Text>
+
+        <Text style={styles.formTitle}>
+          {isEditing ? 'Edit pet profile' : 'Add a new pet'}
+        </Text>
+
+        <Text style={styles.formDescription}>
+          {isEditing
+            ? 'Update your companion’s information.'
+            : 'Let’s get to know your new companion.'}
+        </Text>
+
+        <Text style={styles.label}>Pet's name *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Max"
+          placeholderTextColor="#999"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          maxLength={50}
+        />
+
+        <Text style={styles.label}>Species *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Dog, Cat, Rabbit"
+          placeholderTextColor="#999"
+          value={species}
+          onChangeText={setSpecies}
+          autoCapitalize="words"
+          maxLength={40}
+        />
+
+        <Text style={styles.label}>Breed</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Golden Retriever"
+          placeholderTextColor="#999"
+          value={breed}
+          onChangeText={setBreed}
+          autoCapitalize="words"
+          maxLength={60}
+        />
+
+        <Text style={styles.label}>Age in years</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. 2"
+          placeholderTextColor="#999"
+          value={age}
+          onChangeText={setAge}
+          keyboardType="decimal-pad"
+          maxLength={5}
+        />
+
+        <Pressable style={styles.saveButton} onPress={savePet}>
+          <Text style={styles.saveButtonText}>
+            {isEditing ? 'Save changes' : 'Save pet'}
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.cancelButton}
+          onPress={() => setScreen(isEditing ? 'profile' : 'home')}
+        >
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </Pressable>
+
+        <Text style={styles.requiredNote}>* Required fields</Text>
+      </ScrollView>
+    );
+  }
+
+  function renderProfile() {
+    if (!selectedPet) {
+      return (
+        <View style={styles.formContainer}>
+          <Text>Pet not found.</Text>
+          <Pressable onPress={goHome}>
+            <Text style={styles.backButton}>‹ Back to home</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.profileContainer}>
+        <Pressable onPress={goHome}>
+          <Text style={styles.backButton}>‹ Back to home</Text>
+        </Pressable>
+
+        <View style={styles.profileHero}>
+          <View style={styles.profileAvatar}>
+            <Text style={styles.profileEmoji}>
+              {petEmoji(selectedPet.species)}
+            </Text>
+          </View>
+
+          <Text style={styles.profileName}>{selectedPet.name}</Text>
+          <Text style={styles.profileSubtitle}>
+            {selectedPet.species} · {selectedPet.breed}
+          </Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>Pet information</Text>
+
+        <View style={styles.detailsCard}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Name</Text>
+            <Text style={styles.detailValue}>{selectedPet.name}</Text>
+          </View>
+
+          <View style={styles.detailDivider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Species</Text>
+            <Text style={styles.detailValue}>{selectedPet.species}</Text>
+          </View>
+
+          <View style={styles.detailDivider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Breed</Text>
+            <Text style={styles.detailValue}>{selectedPet.breed}</Text>
+          </View>
+
+          <View style={styles.detailDivider} />
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Age</Text>
+            <Text style={styles.detailValue}>
+              {selectedPet.age === 'Not specified'
+                ? 'Not specified'
+                : `${selectedPet.age} years`}
+            </Text>
+          </View>
+        </View>
+
+        <Pressable style={styles.saveButton} onPress={openEditPet}>
+          <Text style={styles.saveButtonText}>Edit pet profile</Text>
+        </Pressable>
+
+        <View style={styles.profileNote}>
+          <Text style={styles.noteEmoji}>💚</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.reminderTitle}>More care features coming</Text>
+            <Text style={styles.reminderDescription}>
+              Vaccinations, treatments and medical history will be
+              connected to individual pet profiles in upcoming milestones.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderHome() {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.logo}>sisu 🐾</Text>
+            <Text style={styles.subtitle}>
+              Your pet's health companion
+            </Text>
+          </View>
+
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>C</Text>
+          </View>
+        </View>
+
+        <View style={styles.welcome}>
+          <Text style={styles.greeting}>Hello, Pet Parent! 👋</Text>
+          <Text style={styles.description}>
+            Every little paw deserves great care.
+          </Text>
+        </View>
+
+        <Text style={styles.sectionTitle}>Your pets</Text>
+
+        {pets.map((pet) => (
+          <Pressable
+            key={pet.id}
+            style={styles.petCard}
+            onPress={() => openPetProfile(pet)}
+          >
+            <View style={styles.petEmoji}>
+              <Text style={styles.bigEmoji}>
+                {petEmoji(pet.species)}
+              </Text>
+            </View>
+
+            <View style={styles.petInfo}>
+              <Text style={styles.petName}>{pet.name}</Text>
+              <Text style={styles.petDetails}>
+                {pet.species} · {pet.breed}
+              </Text>
+              <Text style={styles.petDetails}>
+                Age: {pet.age}
+                {pet.age !== 'Not specified' ? ' years' : ''}
+              </Text>
+              <Text style={styles.profileLink}>View profile →</Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
+          </Pressable>
+        ))}
+
+        <Pressable style={styles.addPetButton} onPress={openAddPet}>
+          <Text style={styles.addPetText}>+ Add a new pet</Text>
+        </Pressable>
+
+        <Text style={styles.sectionTitle}>Quick actions</Text>
+
+        <View style={styles.actionsGrid}>
+          {[
+            ['🩺', 'Health records', "Track your pet's health"],
+            ['💉', 'Vaccinations', 'Stay on schedule'],
+            ['🏥', 'Find a vet', 'Discover nearby clinics'],
+            ['📅', 'Appointments', 'Plan a vet visit'],
+          ].map(([emoji, title, description]) => (
+            <View key={title} style={styles.actionCard}>
+              <Text style={styles.actionEmoji}>{emoji}</Text>
+              <Text style={styles.actionTitle}>{title}</Text>
+              <Text style={styles.actionDescription}>{description}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={styles.sectionTitle}>Care reminder</Text>
+
+        <View style={styles.reminderCard}>
+          <Text style={styles.reminderEmoji}>💚</Text>
+          <View style={styles.reminderInfo}>
+            <Text style={styles.reminderTitle}>
+              Keep vaccinations up to date
+            </Text>
+            <Text style={styles.reminderDescription}>
+              Record your pet's next vaccination to stay on track.
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.footer}>Made with ♥ for every paw</Text>
+      </ScrollView>
+    );
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAF7" />
 
-      {screen === 'home' ? (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.logo}>sisu 🐾</Text>
-              <Text style={styles.subtitle}>
-                Your pet's health companion
-              </Text>
-            </View>
-
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>C</Text>
-            </View>
-          </View>
-
-          {/* Welcome */}
-          <View style={styles.welcome}>
-            <Text style={styles.greeting}>Hello, Pet Parent! 👋</Text>
-            <Text style={styles.description}>
-              Every little paw deserves great care.
-            </Text>
-          </View>
-
-          {/* Pets */}
-          <Text style={styles.sectionTitle}>Your pets</Text>
-
-          {pets.map((pet) => (
-            <View key={pet.id} style={styles.petCard}>
-              <View style={styles.petEmoji}>
-                <Text style={styles.bigEmoji}>
-                  {pet.species.toLowerCase().includes('cat')
-                    ? '🐈'
-                    : pet.species.toLowerCase().includes('bird')
-                    ? '🐦'
-                    : pet.species.toLowerCase().includes('rabbit')
-                    ? '🐇'
-                    : '🐾'}
-                </Text>
-              </View>
-
-              <View style={styles.petInfo}>
-                <Text style={styles.petName}>{pet.name}</Text>
-
-                <Text style={styles.petDetails}>
-                  {pet.species} · {pet.breed}
-                </Text>
-
-                <Text style={styles.petDetails}>
-                  Age: {pet.age}
-                  {pet.age !== 'Not specified' ? ' years' : ''}
-                </Text>
-              </View>
-            </View>
-          ))}
-
-          <Pressable
-            style={styles.addPetButton}
-            onPress={handleOpenAddPet}
-          >
-            <Text style={styles.addPetText}>+ Add a new pet</Text>
-          </Pressable>
-
-          {/* Quick actions */}
-          <Text style={styles.sectionTitle}>Quick actions</Text>
-
-          <View style={styles.actionsGrid}>
-            <View style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>🩺</Text>
-              <Text style={styles.actionTitle}>Health records</Text>
-              <Text style={styles.actionDescription}>
-                Track your pet's health
-              </Text>
-            </View>
-
-            <View style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>💉</Text>
-              <Text style={styles.actionTitle}>Vaccinations</Text>
-              <Text style={styles.actionDescription}>
-                Stay on schedule
-              </Text>
-            </View>
-
-            <View style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>🏥</Text>
-              <Text style={styles.actionTitle}>Find a vet</Text>
-              <Text style={styles.actionDescription}>
-                Discover nearby clinics
-              </Text>
-            </View>
-
-            <View style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>📅</Text>
-              <Text style={styles.actionTitle}>Appointments</Text>
-              <Text style={styles.actionDescription}>
-                Plan a vet visit
-              </Text>
-            </View>
-          </View>
-
-          {/* Reminder */}
-          <Text style={styles.sectionTitle}>Care reminder</Text>
-
-          <View style={styles.reminderCard}>
-            <Text style={styles.reminderEmoji}>💚</Text>
-
-            <View style={styles.reminderInfo}>
-              <Text style={styles.reminderTitle}>
-                Keep vaccinations up to date
-              </Text>
-
-              <Text style={styles.reminderDescription}>
-                Record your pet's next vaccination to stay on track.
-              </Text>
-            </View>
-          </View>
-
-          <Text style={styles.footer}>
-            Made with ♥ for every paw
-          </Text>
-        </ScrollView>
-      ) : (
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.formContainer}
-        >
-          {/* Form header */}
-          <Pressable onPress={handleGoHome}>
-            <Text style={styles.backButton}>‹ Back to home</Text>
-          </Pressable>
-
-          <Text style={styles.formEmoji}>🐾</Text>
-
-          <Text style={styles.formTitle}>Add a new pet</Text>
-
-          <Text style={styles.formDescription}>
-            Let's get to know your new companion.
-          </Text>
-
-          {/* Pet name */}
-          <Text style={styles.label}>Pet's name *</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Max"
-            placeholderTextColor="#999999"
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-            maxLength={50}
-          />
-
-          {/* Species */}
-          <Text style={styles.label}>Species *</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Dog, Cat, Rabbit"
-            placeholderTextColor="#999999"
-            value={species}
-            onChangeText={setSpecies}
-            autoCapitalize="words"
-            maxLength={40}
-          />
-
-          {/* Breed */}
-          <Text style={styles.label}>Breed</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Golden Retriever"
-            placeholderTextColor="#999999"
-            value={breed}
-            onChangeText={setBreed}
-            autoCapitalize="words"
-            maxLength={60}
-          />
-
-          {/* Age */}
-          <Text style={styles.label}>Age in years</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 2"
-            placeholderTextColor="#999999"
-            value={age}
-            onChangeText={setAge}
-            keyboardType="decimal-pad"
-            maxLength={5}
-          />
-
-          {/* Save */}
-          <Pressable
-            style={styles.saveButton}
-            onPress={handleAddPet}
-          >
-            <Text style={styles.saveButtonText}>Save pet</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.cancelButton}
-            onPress={handleGoHome}
-          >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </Pressable>
-
-          <Text style={styles.requiredNote}>
-            * Required fields
-          </Text>
-        </ScrollView>
-      )}
+      {screen === 'home' && renderHome()}
+      {screen === 'addPet' && renderPetForm(false)}
+      {screen === 'editPet' && renderPetForm(true)}
+      {screen === 'profile' && renderProfile()}
     </SafeAreaView>
   );
 }
@@ -377,6 +510,16 @@ const styles = StyleSheet.create({
     color: '#737B74',
     marginTop: 5,
   },
+  profileLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#26734D',
+    marginTop: 8,
+  },
+  arrow: {
+    fontSize: 30,
+    color: '#89928A',
+  },
   addPetButton: {
     marginHorizontal: 22,
     marginTop: 4,
@@ -467,7 +610,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#26734D',
-    marginBottom: 30,
+    marginBottom: 26,
   },
   formEmoji: {
     fontSize: 44,
@@ -482,7 +625,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#737B74',
     marginTop: 8,
-    marginBottom: 28,
+    marginBottom: 20,
   },
   label: {
     fontSize: 14,
@@ -528,5 +671,78 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#89928A',
     marginTop: 12,
+  },
+  profileContainer: {
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  profileHero: {
+    alignItems: 'center',
+    paddingVertical: 26,
+    marginBottom: 20,
+  },
+  profileAvatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 30,
+    backgroundColor: '#DCEFE2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  profileEmoji: {
+    fontSize: 66,
+  },
+  profileName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#202B24',
+  },
+  profileSubtitle: {
+    fontSize: 14,
+    color: '#737B74',
+    marginTop: 8,
+  },
+  detailsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E8EDE8',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 17,
+    gap: 12,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: '#737B74',
+  },
+  detailValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#202B24',
+    textAlign: 'right',
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: '#E8EDE8',
+  },
+  profileNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#E6F3E9',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 24,
+    gap: 12,
+  },
+  noteEmoji: {
+    fontSize: 26,
   },
 });
