@@ -21,6 +21,7 @@ import AppButton from './src/components/common/AppButton';
 import AppInput from './src/components/common/AppInput';
 import AppHeader from './src/components/common/AppHeader';
 import LoadingIndicator from './src/components/common/LoadingIndicator';
+import VaccinationCard from './src/components/health/VaccinationCard';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -1094,79 +1095,23 @@ function renderHeader(title, subtitle = '') {
             </Text>
           </View>
         ) : (
-          vaccinations.map((vaccination) => {
-            const status = getVaccinationStatus(
-              vaccination.nextDueDate
-            );
+          
+vaccinations.map((vaccination) => {
+  const status = getVaccinationStatus(
+    vaccination.nextDueDate
+  );
 
-            return (
-              <View
-                style={styles.vaccinationCard}
-                key={vaccination.id}
-              >
-                <View style={styles.recordHeader}>
-                  <Text style={styles.recordTitle}>
-                    💉 {vaccination.vaccineName}
-                  </Text>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        borderColor:
-                          getVaccinationStatusColor(status),
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        {
-                          color:
-                            getVaccinationStatusColor(status),
-                        },
-                      ]}
-                    >
-                      {status}
-                    </Text>
-                  </View>
-                </View>
-
-                <RecordDetail
-                  label="Date given"
-                  value={vaccination.dateGiven}
-                />
-                <RecordDetail
-                  label="Next due date"
-                  value={vaccination.nextDueDate || 'Not set'}
-                />
-                <RecordDetail
-                  label="Veterinarian"
-                  value={vaccination.veterinarian}
-                />
-                <RecordDetail
-                  label="Notes"
-                  value={vaccination.notes}
-                />
-
-                <View style={styles.buttonRow}>
-                  <View style={styles.buttonHalf}>
-                    {renderButton(
-                      'Edit',
-                      () => openEditVaccination(vaccination),
-                      'secondary'
-                    )}
-                  </View>
-                  <View style={styles.buttonHalf}>
-                    {renderButton(
-                      'Delete',
-                      () => deleteVaccination(vaccination.id),
-                      'danger'
-                    )}
-                  </View>
-                </View>
-              </View>
-            );
-          })
+  return (
+    <VaccinationCard
+      key={vaccination.id}
+      vaccination={vaccination}
+      status={status}
+      statusColor={getVaccinationStatusColor(status)}
+      onEdit={() => openEditVaccination(vaccination)}
+      onDelete={() => deleteVaccination(vaccination.id)}
+    />
+  );
+})
         )}
 
         {renderButton(
