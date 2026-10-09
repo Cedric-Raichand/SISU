@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Sisu",
@@ -6,6 +7,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-notifications"
+    ],
     "ios": {
       "supportsTablet": true
     },

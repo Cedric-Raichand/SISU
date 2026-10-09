@@ -166,7 +166,21 @@ function getVaccinationStatusColor(status) {
   return '#667085';
 }
 
+
 function normalizePet(pet) {
+  const vaccinations = Array.isArray(pet.vaccinations)
+    ? pet.vaccinations.map((vaccination) => ({
+        ...vaccination,
+        id: vaccination.id || createId(),
+        vaccineName: vaccination.vaccineName || '',
+        dateGiven: vaccination.dateGiven || '',
+        nextDueDate: vaccination.nextDueDate || '',
+        veterinarian: vaccination.veterinarian || '',
+        notes: vaccination.notes || '',
+        notificationId: vaccination.notificationId || null,
+      }))
+    : [];
+
   return {
     id: pet.id || createId(),
     name: pet.name || '',
@@ -180,11 +194,10 @@ function normalizePet(pet) {
     healthRecords: Array.isArray(pet.healthRecords)
       ? pet.healthRecords
       : [],
-    vaccinations: Array.isArray(pet.vaccinations)
-      ? pet.vaccinations
-      : [],
+    vaccinations,
   };
 }
+
 
 export default function App() {
   const [screen, setScreen] = useState('home');
