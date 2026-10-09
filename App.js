@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import {
   SafeAreaView,
@@ -17,6 +16,7 @@ import FeatureCard from './src/components/common/FeatureCard';
 import ProfileDetail from './src/components/pets/ProfileDetail';
 import RecordDetail from './src/components/health/RecordDetail';
 import PetCard from './src/components/pets/PetCard';
+import ReminderCard from './src/components/reminders/ReminderCard';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -494,9 +494,7 @@ export default function App() {
       notes: vaccination.notes || '',
     });
     setScreen('editVaccination');
-  }
-
-  function saveVaccination() {
+  }  function saveVaccination() {
     if (!selectedPet) {
       Alert.alert('Error', 'Please select a pet first.');
       return;
@@ -820,8 +818,7 @@ export default function App() {
           )}
           {renderButton(
             'Cancel',
-            () =>
-              setScreen(editing ? 'profile' : 'home'),
+            () => setScreen(editing ? 'profile' : 'home'),
             'secondary'
           )}
         </View>
@@ -1012,8 +1009,7 @@ export default function App() {
       </ScrollView>
     );
   }
-
-  function renderHealthRecordForm() {
+    function renderHealthRecordForm() {
     const editing = screen === 'editHealthRecord';
 
     return (
@@ -1346,11 +1342,11 @@ export default function App() {
         ) : (
           pets.map((pet) => (
             <PetCard
-            key={pet.id}
-            pet={pet}
-            emoji={petEmoji(pet.species)}
-            onPress={() => openProfile(pet)}
-           />
+              key={pet.id}
+              pet={pet}
+              emoji={petEmoji(pet.species)}
+              onPress={() => openProfile(pet)}
+            />
           ))
         )}
 
@@ -1369,37 +1365,15 @@ export default function App() {
           </View>
         ) : (
           reminders.slice(0, 8).map((item) => (
-            <Pressable
+            <ReminderCard
               key={`${item.petId}-${item.id}`}
-              style={styles.reminderCard}
+              item={item}
+              statusColor={getVaccinationStatusColor(item.status)}
               onPress={() => {
                 setSelectedPetId(item.petId);
                 setScreen('vaccinations');
               }}
-            >
-              <View style={styles.reminderMain}>
-                <Text style={styles.reminderTitle}>
-                  {item.vaccineName}
-                </Text>
-                <Text style={styles.reminderPet}>
-                  {item.petName}
-                </Text>
-                <Text style={styles.reminderDate}>
-                  Due: {item.nextDueDate}
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.reminderStatus,
-                  {
-                    color: getVaccinationStatusColor(item.status),
-                  },
-                ]}
-              >
-                {item.status}
-              </Text>
-            </Pressable>
+            />
           ))
         )}
 
@@ -1530,9 +1504,6 @@ export default function App() {
     </SafeAreaView>
   );
 }
-
-
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -1737,11 +1708,6 @@ const styles = StyleSheet.create({
     color: '#667085',
     marginBottom: 14,
   },
- 
-  petEmoji: {
-    fontSize: 28,
-  },
- 
   chevron: {
     fontSize: 28,
     color: '#98A2B3',
@@ -1767,26 +1733,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#47645D',
     marginTop: 5,
-  },
-  profileDetail: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F2F1',
-  },
-  detailLabel: {
-    flex: 1,
-    fontSize: 13,
-    color: '#667085',
-  },
-  detailValue: {
-    flex: 1,
-    fontSize: 13,
-    color: '#344054',
-    fontWeight: '600',
-    textAlign: 'right',
   },
   summaryText: {
     fontSize: 14,
@@ -1824,19 +1770,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#667085',
   },
-  recordDetail: {
-    paddingVertical: 6,
-  },
-  recordDetailLabel: {
-    fontSize: 11,
-    color: '#667085',
-    marginBottom: 3,
-  },
-  recordDetailValue: {
-    fontSize: 13,
-    color: '#344054',
-    lineHeight: 19,
-  },
   buttonRow: {
     flexDirection: 'row',
     gap: 10,
@@ -1856,41 +1789,6 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: '800',
-  },
-  reminderCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-    padding: 15,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: '#E7EEEA',
-    marginBottom: 10,
-  },
-  reminderMain: {
-    flex: 1,
-  },
-  reminderTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#153E35',
-    marginBottom: 4,
-  },
-  reminderPet: {
-    fontSize: 12,
-    color: '#667085',
-    marginBottom: 4,
-  },
-  reminderDate: {
-    fontSize: 12,
-    color: '#475467',
-  },
-  reminderStatus: {
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'right',
   },
   emptyState: {
     alignItems: 'center',
