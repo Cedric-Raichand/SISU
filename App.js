@@ -19,6 +19,7 @@ import PetCard from './src/components/pets/PetCard';
 import ReminderCard from './src/components/reminders/ReminderCard';
 import AppButton from './src/components/common/AppButton';
 import AppInput from './src/components/common/AppInput';
+import AppHeader from './src/components/common/AppHeader';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -728,16 +729,15 @@ function renderHealthInput(
     return '🐾';
   }
 
-  function renderHeader(title, subtitle = '') {
-    return (
-      <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>{title}</Text>
-        {!!subtitle && (
-          <Text style={styles.pageSubtitle}>{subtitle}</Text>
-        )}
-      </View>
-    );
-  }
+ 
+function renderHeader(title, subtitle = '') {
+  return (
+    <AppHeader
+      title={title}
+      subtitle={subtitle}
+    />
+  );
+}
 
   function renderPetForm() {
     const editing = screen === 'editPet';
@@ -1554,21 +1554,7 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginBottom: 18,
   },
-  pageHeader: {
-    marginBottom: 20,
-    marginTop: 6,
-  },
-  pageTitle: {
-    fontSize: 25,
-    fontWeight: '800',
-    color: '#153E35',
-    marginBottom: 6,
-  },
-  pageSubtitle: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#667085',
-  },
+ 
   statsRow: {
     flexDirection: 'row',
     gap: 10,
