@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SafeAreaView,
   ScrollView,
@@ -10,37 +11,102 @@ import {
   StatusBar,
   Pressable,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+
+const STORAGE_KEY = 'sisu_pets';
+
+const INITIAL_PETS = [
+  {
+    id: '1',
+    name: 'Buddy',
+    species: 'Dog',
+    breed: 'Golden Retriever',
+    age: '2',
+  },
+];
 
 export default function App() {
   const [screen, setScreen] = useState('home');
-
-  const [pets, setPets] = useState([
-    {
-      id: '1',
-      name: 'Buddy',
-      species: 'Dog',
-      breed: 'Golden Retriever',
-      age: '2',
-    },
-  ]);
-
+  const [pets, setPets] = useState([]);
   const [selectedPetId, setSelectedPetId] = useState(null);
+  const [petsLoaded, setPetsLoaded] = useState(false);
 
   const [name, setName] = useState('');
   const [species, setSpecies] = useState('');
   const [breed, setBreed] = useState('');
   const [age, setAge] = useState('');
 
+  // Load pets from device storage when the app starts.
+  useEffect(() => {
+    async function loadPets() {
+      try {
+        const savedPets = await AsyncStorage.getItem(STORAGE_KEY);
+
+        if (savedPets !== null) {
+          const parsedPets = JSON.parse(savedPets);
+
+          if (Array.isArray(parsedPets)) {
+            setPets(parsedPets);
+          } else {
+            setPets(INITIAL_PETS);
+          }
+        } else {
+          // First launch: start with the demo pet.
+          setPets(INITIAL_PETS);
+        }
+      } catch (error) {
+        console.error('Error loading pets:', error);
+        Alert.alert(
+          'Storage Error',
+          'We could not load your saved pets.'
+        );
+        setPets(INITIAL_PETS);
+      } finally {
+        setPetsLoaded(true);
+      }
+    }
+
+    loadPets();
+  }, []);
+
+  // Save pets whenever the list changes after loading.
+  useEffect(() => {
+    if (!petsLoaded) {
+      return;
+    }
+
+    async function savePets() {
+      try {
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(pets)
+        );
+      } catch (error) {
+        console.error('Error saving pets:', error);
+        Alert.alert(
+          'Save Error',
+          'Your pet information could not be saved.'
+        );
+      }
+    }
+
+    savePets();
+  }, [pets, petsLoaded]);
+
   const selectedPet = pets.find(
     (pet) => pet.id === selectedPetId
   );
 
-  function openAddPet() {
+  function resetForm() {
     setName('');
     setSpecies('');
     setBreed('');
     setAge('');
+  }
+
+  function openAddPet() {
+    resetForm();
     setScreen('addPet');
   }
 
@@ -49,46 +115,47 @@ export default function App() {
     setScreen('profile');
   }
 
-  function openEditPet() {
-    if (!selectedPet) return;
-
-    setName(selectedPet.name);
-    setSpecies(selectedPet.species);
-    setBreed(
-      selectedPet.breed === 'Unknown breed'
-        ? ''
-        : selectedPet.breed
-    );
-    setAge(
-      selectedPet.age === 'Not specified'
-        ? ''
-        : selectedPet.age
-    );
-
+  function openEditPet(pet) {
+    setSelectedPetId(pet.id);
+    setName(pet.name);
+    setSpecies(pet.species);
+    setBreed(pet.breed);
+    setAge(pet.age);
     setScreen('editPet');
+  }
+
+  function goHome() {
+    resetForm();
+    setScreen('home');
   }
 
   function savePet() {
     if (!name.trim() || !species.trim()) {
       Alert.alert(
-        'Missing information',
-        "Please enter your pet's name and species."
+        'Missing Information',
+        'Please enter your pet’s name and species.'
       );
       return;
     }
 
-    if (
-      age.trim() &&
-      (!Number.isFinite(Number(age)) || Number(age) < 0)
-    ) {
-      Alert.alert(
-        'Invalid age',
-        'Please enter a valid age of zero or greater.'
-      );
+    if (screen === 'addPet') {
+      const newPet = {
+        id: `${Date.now()}-${Math.random()}`,
+        name: name.trim(),
+        species: species.trim(),
+        breed: breed.trim() || 'Not specified',
+        age: age.trim() || 'Not specified',
+      };
+
+      setPets((currentPets) => [...currentPets, newPet]);
+      resetForm();
+      setScreen('home');
+
+      Alert.alert('Success', `${newPet.name} has been added to Sisu.`);
       return;
     }
 
-    if (screen === 'editPet') {
+    if (screen === 'editPet' && selectedPetId) {
       setPets((currentPets) =>
         currentPets.map((pet) =>
           pet.id === selectedPetId
@@ -96,134 +163,125 @@ export default function App() {
                 ...pet,
                 name: name.trim(),
                 species: species.trim(),
-                breed: breed.trim() || 'Unknown breed',
+                breed: breed.trim() || 'Not specified',
                 age: age.trim() || 'Not specified',
               }
             : pet
         )
       );
 
+      resetForm();
       setScreen('profile');
 
-      Alert.alert('Updated!', 'Your pet profile has been updated.');
-      return;
+      Alert.alert('Success', 'Pet profile updated successfully.');
     }
-
-    const newPet = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      species: species.trim(),
-      breed: breed.trim() || 'Unknown breed',
-      age: age.trim() || 'Not specified',
-    };
-
-    setPets((currentPets) => [...currentPets, newPet]);
-    setSelectedPetId(newPet.id);
-    setScreen('profile');
-
-    Alert.alert('Success!', `${newPet.name} has been added to Sisu.`);
   }
 
   function petEmoji(speciesName) {
-    const value = speciesName.toLowerCase();
+    const value = speciesName?.toLowerCase();
 
-    if (value.includes('cat')) return '🐈';
-    if (value.includes('dog')) return '🐕';
-    if (value.includes('bird')) return '🐦';
-    if (value.includes('rabbit')) return '🐇';
-    if (value.includes('fish')) return '🐠';
+    if (value?.includes('dog')) return '🐕';
+    if (value?.includes('cat')) return '🐈';
+    if (value?.includes('bird')) return '🐦';
+    if (value?.includes('rabbit')) return '🐇';
+    if (value?.includes('fish')) return '🐟';
+    if (value?.includes('turtle')) return '🐢';
 
     return '🐾';
   }
 
-  function goHome() {
-    setScreen('home');
+  function renderButton(label, onPress, secondary = false) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={[
+          styles.button,
+          secondary && styles.secondaryButton,
+        ]}
+      >
+        <Text
+          style={[
+            styles.buttonText,
+            secondary && styles.secondaryButtonText,
+          ]}
+        >
+          {label}
+        </Text>
+      </Pressable>
+    );
   }
 
-  function renderPetForm(isEditing) {
+  function renderPetForm() {
+    const isEditing = screen === 'editPet';
+
     return (
       <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.formContainer}
       >
-        <Pressable onPress={() => setScreen(isEditing ? 'profile' : 'home')}>
-          <Text style={styles.backButton}>
-            ‹ {isEditing ? 'Back to profile' : 'Back to home'}
-          </Text>
-        </Pressable>
-
-        <Text style={styles.formEmoji}>
-          {isEditing ? '✏️' : '🐾'}
+        <Text style={styles.eyebrow}>
+          {isEditing ? 'UPDATE INFORMATION' : 'NEW COMPANION'}
         </Text>
 
-        <Text style={styles.formTitle}>
-          {isEditing ? 'Edit pet profile' : 'Add a new pet'}
+        <Text style={styles.heading}>
+          {isEditing ? 'Edit Pet Profile' : 'Add a Pet'}
         </Text>
 
-        <Text style={styles.formDescription}>
+        <Text style={styles.subtitle}>
           {isEditing
-            ? 'Update your companion’s information.'
-            : 'Let’s get to know your new companion.'}
+            ? 'Keep your pet’s information up to date.'
+            : 'Let’s create a profile for your pet.'}
         </Text>
 
-        <Text style={styles.label}>Pet's name *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Max"
-          placeholderTextColor="#999"
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-          maxLength={50}
-        />
+        <View style={styles.formCard}>
+          <Text style={styles.label}>Pet Name *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Luna"
+            placeholderTextColor="#999"
+            value={name}
+            onChangeText={setName}
+          />
 
-        <Text style={styles.label}>Species *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Dog, Cat, Rabbit"
-          placeholderTextColor="#999"
-          value={species}
-          onChangeText={setSpecies}
-          autoCapitalize="words"
-          maxLength={40}
-        />
+          <Text style={styles.label}>Species *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Dog or Cat"
+            placeholderTextColor="#999"
+            value={species}
+            onChangeText={setSpecies}
+          />
 
-        <Text style={styles.label}>Breed</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Golden Retriever"
-          placeholderTextColor="#999"
-          value={breed}
-          onChangeText={setBreed}
-          autoCapitalize="words"
-          maxLength={60}
-        />
+          <Text style={styles.label}>Breed</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Golden Retriever"
+            placeholderTextColor="#999"
+            value={breed}
+            onChangeText={setBreed}
+          />
 
-        <Text style={styles.label}>Age in years</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. 2"
-          placeholderTextColor="#999"
-          value={age}
-          onChangeText={setAge}
-          keyboardType="decimal-pad"
-          maxLength={5}
-        />
+          <Text style={styles.label}>Age</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 2 years"
+            placeholderTextColor="#999"
+            value={age}
+            onChangeText={setAge}
+          />
 
-        <Pressable style={styles.saveButton} onPress={savePet}>
-          <Text style={styles.saveButtonText}>
-            {isEditing ? 'Save changes' : 'Save pet'}
+          <Text style={styles.helper}>
+            Fields marked * are required.
           </Text>
-        </Pressable>
 
-        <Pressable
-          style={styles.cancelButton}
-          onPress={() => setScreen(isEditing ? 'profile' : 'home')}
-        >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </Pressable>
+          {renderButton(
+            isEditing ? 'Save Changes' : 'Add Pet',
+            savePet
+          )}
 
-        <Text style={styles.requiredNote}>* Required fields</Text>
+          {renderButton('Cancel', goHome, true)}
+        </View>
       </ScrollView>
     );
   }
@@ -231,81 +289,48 @@ export default function App() {
   function renderProfile() {
     if (!selectedPet) {
       return (
-        <View style={styles.formContainer}>
-          <Text>Pet not found.</Text>
-          <Pressable onPress={goHome}>
-            <Text style={styles.backButton}>‹ Back to home</Text>
-          </Pressable>
+        <View style={styles.centered}>
+          <Text style={styles.heading}>Pet not found</Text>
+          {renderButton('Back to Home', goHome)}
         </View>
       );
     }
 
     return (
-      <ScrollView contentContainerStyle={styles.profileContainer}>
-        <Pressable onPress={goHome}>
-          <Text style={styles.backButton}>‹ Back to home</Text>
-        </Pressable>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.eyebrow}>YOUR COMPANION</Text>
+        <Text style={styles.heading}>Pet Profile</Text>
 
-        <View style={styles.profileHero}>
-          <View style={styles.profileAvatar}>
-            <Text style={styles.profileEmoji}>
+        <View style={styles.profileCard}>
+          <View style={styles.petAvatar}>
+            <Text style={styles.avatarEmoji}>
               {petEmoji(selectedPet.species)}
             </Text>
           </View>
 
-          <Text style={styles.profileName}>{selectedPet.name}</Text>
-          <Text style={styles.profileSubtitle}>
-            {selectedPet.species} · {selectedPet.breed}
+          <Text style={styles.profileName}>
+            {selectedPet.name}
           </Text>
-        </View>
+          <Text style={styles.profileSpecies}>
+            {selectedPet.species}
+          </Text>
 
-        <Text style={styles.sectionTitle}>Pet information</Text>
+          <View style={styles.divider} />
 
-        <View style={styles.detailsCard}>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Name</Text>
-            <Text style={styles.detailValue}>{selectedPet.name}</Text>
-          </View>
+          <ProfileDetail label="Pet Name" value={selectedPet.name} />
+          <ProfileDetail label="Species" value={selectedPet.species} />
+          <ProfileDetail label="Breed" value={selectedPet.breed} />
+          <ProfileDetail label="Age" value={selectedPet.age} />
 
-          <View style={styles.detailDivider} />
+          {renderButton(
+            'Edit Pet Profile',
+            () => openEditPet(selectedPet)
+          )}
 
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Species</Text>
-            <Text style={styles.detailValue}>{selectedPet.species}</Text>
-          </View>
-
-          <View style={styles.detailDivider} />
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Breed</Text>
-            <Text style={styles.detailValue}>{selectedPet.breed}</Text>
-          </View>
-
-          <View style={styles.detailDivider} />
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Age</Text>
-            <Text style={styles.detailValue}>
-              {selectedPet.age === 'Not specified'
-                ? 'Not specified'
-                : `${selectedPet.age} years`}
-            </Text>
-          </View>
-        </View>
-
-        <Pressable style={styles.saveButton} onPress={openEditPet}>
-          <Text style={styles.saveButtonText}>Edit pet profile</Text>
-        </Pressable>
-
-        <View style={styles.profileNote}>
-          <Text style={styles.noteEmoji}>💚</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.reminderTitle}>More care features coming</Text>
-            <Text style={styles.reminderDescription}>
-              Vaccinations, treatments and medical history will be
-              connected to individual pet profiles in upcoming milestones.
-            </Text>
-          </View>
+          {renderButton('Back to Home', goHome, true)}
         </View>
       </ScrollView>
     );
@@ -313,436 +338,515 @@ export default function App() {
 
   function renderHome() {
     return (
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+      >
+        <View style={styles.topBar}>
           <View>
-            <Text style={styles.logo}>sisu 🐾</Text>
-            <Text style={styles.subtitle}>
-              Your pet's health companion
+            <Text style={styles.logo}>sisu</Text>
+            <Text style={styles.tagline}>
+              Better care for your companions.
             </Text>
           </View>
 
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>C</Text>
+          <View style={styles.logoIcon}>
+            <Text style={styles.logoEmoji}>🐾</Text>
           </View>
         </View>
 
-        <View style={styles.welcome}>
-          <Text style={styles.greeting}>Hello, Pet Parent! 👋</Text>
-          <Text style={styles.description}>
-            Every little paw deserves great care.
+        <View style={styles.welcomeCard}>
+          <Text style={styles.welcomeSmall}>WELCOME TO SISU</Text>
+          <Text style={styles.welcomeHeading}>
+            Every pet deserves{'\n'}a healthy life.
+          </Text>
+          <Text style={styles.welcomeDescription}>
+            Keep your pets’ information together in one place.
           </Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Your pets</Text>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>My Pets</Text>
+            <Text style={styles.sectionSubtitle}>
+              Your beloved companions
+            </Text>
+          </View>
 
-        {pets.map((pet) => (
           <Pressable
-            key={pet.id}
-            style={styles.petCard}
-            onPress={() => openPetProfile(pet)}
+            style={styles.addButton}
+            onPress={openAddPet}
           >
-            <View style={styles.petEmoji}>
-              <Text style={styles.bigEmoji}>
-                {petEmoji(pet.species)}
-              </Text>
-            </View>
-
-            <View style={styles.petInfo}>
-              <Text style={styles.petName}>{pet.name}</Text>
-              <Text style={styles.petDetails}>
-                {pet.species} · {pet.breed}
-              </Text>
-              <Text style={styles.petDetails}>
-                Age: {pet.age}
-                {pet.age !== 'Not specified' ? ' years' : ''}
-              </Text>
-              <Text style={styles.profileLink}>View profile →</Text>
-            </View>
-
-            <Text style={styles.arrow}>›</Text>
+            <Text style={styles.addButtonText}>+ Add Pet</Text>
           </Pressable>
-        ))}
-
-        <Pressable style={styles.addPetButton} onPress={openAddPet}>
-          <Text style={styles.addPetText}>+ Add a new pet</Text>
-        </Pressable>
-
-        <Text style={styles.sectionTitle}>Quick actions</Text>
-
-        <View style={styles.actionsGrid}>
-          {[
-            ['🩺', 'Health records', "Track your pet's health"],
-            ['💉', 'Vaccinations', 'Stay on schedule'],
-            ['🏥', 'Find a vet', 'Discover nearby clinics'],
-            ['📅', 'Appointments', 'Plan a vet visit'],
-          ].map(([emoji, title, description]) => (
-            <View key={title} style={styles.actionCard}>
-              <Text style={styles.actionEmoji}>{emoji}</Text>
-              <Text style={styles.actionTitle}>{title}</Text>
-              <Text style={styles.actionDescription}>{description}</Text>
-            </View>
-          ))}
         </View>
 
-        <Text style={styles.sectionTitle}>Care reminder</Text>
+        {pets.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>🐾</Text>
+            <Text style={styles.emptyTitle}>No pets yet</Text>
+            <Text style={styles.emptyDescription}>
+              Add your first pet to start building their profile.
+            </Text>
+            {renderButton('Add Your First Pet', openAddPet)}
+          </View>
+        ) : (
+          pets.map((pet) => (
+            <Pressable
+              key={pet.id}
+              style={styles.petCard}
+              onPress={() => openPetProfile(pet)}
+            >
+              <View style={styles.petIcon}>
+                <Text style={styles.petCardEmoji}>
+                  {petEmoji(pet.species)}
+                </Text>
+              </View>
 
-        <View style={styles.reminderCard}>
-          <Text style={styles.reminderEmoji}>💚</Text>
-          <View style={styles.reminderInfo}>
-            <Text style={styles.reminderTitle}>
-              Keep vaccinations up to date
+              <View style={styles.petInfo}>
+                <Text style={styles.petName}>{pet.name}</Text>
+                <Text style={styles.petDescription}>
+                  {pet.breed}
+                </Text>
+                <Text style={styles.petAge}>
+                  {pet.species} · {pet.age}
+                </Text>
+              </View>
+
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          ))
+        )}
+
+        <Text style={styles.sectionTitle}>Explore Sisu</Text>
+        <Text style={styles.sectionSubtitle}>
+          More ways to care for your pets
+        </Text>
+
+        <View style={styles.featureCard}>
+          <Text style={styles.featureEmoji}>🩺</Text>
+          <View style={styles.featureInfo}>
+            <Text style={styles.featureTitle}>Health Records</Text>
+            <Text style={styles.featureDescription}>
+              Keep track of treatments and medical history.
             </Text>
-            <Text style={styles.reminderDescription}>
-              Record your pet's next vaccination to stay on track.
-            </Text>
+            <Text style={styles.comingSoon}>COMING SOON</Text>
           </View>
         </View>
 
-        <Text style={styles.footer}>Made with ♥ for every paw</Text>
+        <View style={styles.featureCard}>
+          <Text style={styles.featureEmoji}>💉</Text>
+          <View style={styles.featureInfo}>
+            <Text style={styles.featureTitle}>Vaccinations</Text>
+            <Text style={styles.featureDescription}>
+              Organize vaccination records and due dates.
+            </Text>
+            <Text style={styles.comingSoon}>COMING SOON</Text>
+          </View>
+        </View>
+
+        <View style={styles.featureCard}>
+          <Text style={styles.featureEmoji}>🏥</Text>
+          <View style={styles.featureInfo}>
+            <Text style={styles.featureTitle}>Find a Veterinarian</Text>
+            <Text style={styles.featureDescription}>
+              Discover veterinary care for your companions.
+            </Text>
+            <Text style={styles.comingSoon}>COMING SOON</Text>
+          </View>
+        </View>
+
+        <Text style={styles.footer}>
+          Made with care for every paw. 🐾
+        </Text>
       </ScrollView>
     );
   }
 
+  if (!petsLoaded) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <StatusBar barStyle="dark-content" />
+        <Text style={styles.logo}>sisu</Text>
+        <ActivityIndicator size="large" color="#267A60" />
+        <Text style={styles.loadingText}>
+          Loading your pets...
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAF7" />
+    <SafeAreaView style={styles.app}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F7F8F4" />
 
       {screen === 'home' && renderHome()}
-      {screen === 'addPet' && renderPetForm(false)}
-      {screen === 'editPet' && renderPetForm(true)}
+      {(screen === 'addPet' || screen === 'editPet') &&
+        renderPetForm()}
       {screen === 'profile' && renderProfile()}
     </SafeAreaView>
   );
 }
 
+function ProfileDetail({ label, value }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value || 'Not specified'}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
+  app: {
     flex: 1,
-    backgroundColor: '#F8FAF7',
+    backgroundColor: '#F7F8F4',
   },
-  header: {
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: '#F7F8F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: '#66736B',
+    fontSize: 14,
+  },
+  screen: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 40,
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
+  },
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 22,
-    paddingTop: 18,
+    marginBottom: 24,
   },
   logo: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#267A60',
+    letterSpacing: -1.5,
+  },
+  tagline: {
+    color: '#66736B',
+    fontSize: 13,
+    marginTop: -2,
+  },
+  logoIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#E0EFE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoEmoji: {
+    fontSize: 24,
+  },
+  welcomeCard: {
+    backgroundColor: '#267A60',
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 30,
+  },
+  welcomeSmall: {
+    color: '#D5F0E1',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  welcomeHeading: {
+    color: '#FFFFFF',
     fontSize: 30,
     fontWeight: '800',
-    color: '#26734D',
+    lineHeight: 36,
+    marginBottom: 12,
   },
-  subtitle: {
-    fontSize: 13,
-    color: '#777F78',
-    marginTop: 3,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#DCEFE2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#26734D',
-  },
-  welcome: {
-    marginHorizontal: 22,
-    marginTop: 30,
-    marginBottom: 28,
-  },
-  greeting: {
-    fontSize: 25,
-    fontWeight: '800',
-    color: '#202B24',
-  },
-  description: {
+  welcomeDescription: {
+    color: '#E0F0E7',
     fontSize: 14,
-    color: '#737B74',
-    marginTop: 8,
+    lineHeight: 21,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 19,
-    fontWeight: '700',
-    color: '#202B24',
-    marginHorizontal: 22,
+    fontSize: 21,
+    fontWeight: '800',
+    color: '#20372C',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    color: '#78837C',
+    fontSize: 13,
     marginBottom: 14,
-    marginTop: 8,
+  },
+  addButton: {
+    backgroundColor: '#267A60',
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   petCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 22,
-    marginBottom: 12,
-    padding: 16,
     borderRadius: 18,
+    padding: 15,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E8EDE8',
+    borderColor: '#E9EDE8',
   },
-  petEmoji: {
-    width: 68,
-    height: 68,
-    borderRadius: 16,
-    backgroundColor: '#FFF0D9',
-    justifyContent: 'center',
+  petIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 17,
+    backgroundColor: '#EAF3EC',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
   },
-  bigEmoji: {
-    fontSize: 38,
+  petCardEmoji: {
+    fontSize: 29,
   },
   petInfo: {
     flex: 1,
-    marginLeft: 14,
   },
   petName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#202B24',
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#20372C',
+    marginBottom: 3,
   },
-  petDetails: {
+  petDescription: {
+    color: '#64736A',
     fontSize: 13,
-    color: '#737B74',
-    marginTop: 5,
+    marginBottom: 4,
   },
-  profileLink: {
+  petAge: {
+    color: '#89938D',
     fontSize: 12,
-    fontWeight: '700',
-    color: '#26734D',
-    marginTop: 8,
   },
-  arrow: {
-    fontSize: 30,
-    color: '#89928A',
-  },
-  addPetButton: {
-    marginHorizontal: 22,
-    marginTop: 4,
-    marginBottom: 26,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#26734D',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-  },
-  addPetText: {
-    color: '#26734D',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    marginBottom: 22,
-  },
-  actionCard: {
-    width: '46%',
-    flexGrow: 1,
-    backgroundColor: '#FFFFFF',
-    margin: '2%',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E8EDE8',
-    minHeight: 140,
-  },
-  actionEmoji: {
-    fontSize: 27,
-    marginBottom: 12,
-  },
-  actionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#202B24',
-  },
-  actionDescription: {
-    fontSize: 12,
-    color: '#737B74',
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  reminderCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 22,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#E6F3E9',
-    marginBottom: 24,
-  },
-  reminderEmoji: {
+  chevron: {
     fontSize: 28,
+    color: '#8B9A90',
+    marginLeft: 8,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: '#E9EDE8',
+  },
+  emptyEmoji: {
+    fontSize: 38,
+    marginBottom: 10,
+  },
+  emptyTitle: {
+    color: '#20372C',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  emptyDescription: {
+    color: '#78837C',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  featureCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    padding: 17,
+    borderRadius: 17,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E9EDE8',
+  },
+  featureEmoji: {
+    fontSize: 27,
     marginRight: 14,
   },
-  reminderInfo: {
+  featureInfo: {
     flex: 1,
   },
-  reminderTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#245A3D',
-  },
-  reminderDescription: {
-    fontSize: 12,
-    color: '#4F705B',
-    marginTop: 5,
-    lineHeight: 18,
-  },
-  footer: {
-    textAlign: 'center',
-    color: '#89928A',
-    fontSize: 12,
-    marginBottom: 25,
-  },
-  formContainer: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-  backButton: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#26734D',
-    marginBottom: 26,
-  },
-  formEmoji: {
-    fontSize: 44,
-    marginBottom: 12,
-  },
-  formTitle: {
-    fontSize: 28,
+  featureTitle: {
+    color: '#20372C',
+    fontSize: 15,
     fontWeight: '800',
-    color: '#202B24',
+    marginBottom: 5,
   },
-  formDescription: {
+  featureDescription: {
+    color: '#78837C',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  comingSoon: {
+    color: '#267A60',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  eyebrow: {
+    color: '#267A60',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  heading: {
+    fontSize: 28,
+    color: '#20372C',
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  subtitle: {
+    color: '#78837C',
     fontSize: 14,
-    color: '#737B74',
-    marginTop: 8,
-    marginBottom: 20,
+    lineHeight: 21,
+    marginBottom: 24,
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E9EDE8',
   },
   label: {
-    fontSize: 14,
+    color: '#34483B',
+    fontSize: 13,
     fontWeight: '700',
-    color: '#303A32',
     marginBottom: 8,
-    marginTop: 16,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAF7',
     borderWidth: 1,
-    borderColor: '#DDE5DD',
+    borderColor: '#DFE7DF',
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 13,
     fontSize: 15,
-    color: '#202B24',
-  },
-  saveButton: {
-    backgroundColor: '#26734D',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 30,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  cancelButton: {
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  cancelButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#737B74',
-  },
-  requiredNote: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#89928A',
-    marginTop: 12,
-  },
-  profileContainer: {
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-  profileHero: {
-    alignItems: 'center',
-    paddingVertical: 26,
-    marginBottom: 20,
-  },
-  profileAvatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    backgroundColor: '#DCEFE2',
-    justifyContent: 'center',
-    alignItems: 'center',
+    color: '#20372C',
     marginBottom: 18,
   },
-  profileEmoji: {
-    fontSize: 66,
+  helper: {
+    color: '#78837C',
+    fontSize: 12,
+    marginBottom: 16,
   },
-  profileName: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#202B24',
-  },
-  profileSubtitle: {
-    fontSize: 14,
-    color: '#737B74',
+  button: {
+    backgroundColor: '#267A60',
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
   },
-  detailsCard: {
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  secondaryButton: {
+    backgroundColor: '#EAF1EB',
+  },
+  secondaryButtonText: {
+    color: '#267A60',
+  },
+  profileCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    padding: 22,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E8EDE8',
+    borderColor: '#E9EDE8',
+    marginTop: 14,
+  },
+  petAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 30,
+    backgroundColor: '#EAF3EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  avatarEmoji: {
+    fontSize: 48,
+  },
+  profileName: {
+    textAlign: 'center',
+    fontSize: 25,
+    fontWeight: '800',
+    color: '#20372C',
+  },
+  profileSpecies: {
+    textAlign: 'center',
+    color: '#78837C',
+    fontSize: 14,
+    marginTop: 5,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E8EDE7',
+    marginBottom: 8,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 17,
-    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2EE',
+    gap: 16,
   },
   detailLabel: {
-    fontSize: 14,
-    color: '#737B74',
+    color: '#78837C',
+    fontSize: 13,
   },
   detailValue: {
-    flex: 1,
-    fontSize: 14,
+    color: '#20372C',
+    fontSize: 13,
     fontWeight: '700',
-    color: '#202B24',
+    flexShrink: 1,
     textAlign: 'right',
   },
-  detailDivider: {
-    height: 1,
-    backgroundColor: '#E8EDE8',
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
   },
-  profileNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#E6F3E9',
-    padding: 16,
-    borderRadius: 16,
-    marginTop: 24,
-    gap: 12,
-  },
-  noteEmoji: {
-    fontSize: 26,
+  footer: {
+    textAlign: 'center',
+    color: '#89938D',
+    fontSize: 12,
+    marginTop: 22,
+    marginBottom: 12,
   },
 });
