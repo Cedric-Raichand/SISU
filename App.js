@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
+import ProfileDetail from './src/components/pets/ProfileDetail';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -1548,18 +1549,6 @@ export default function App() {
   );
 }
 
-function ProfileDetail({ label, value }) {
-  return (
-    <View style={styles.profileDetail}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>
-        {value === undefined || value === null || value === ''
-          ? 'Not provided'
-          : String(value)}
-      </Text>
-    </View>
-  );
-}
 
 function RecordDetail({ label, value }) {
   if (!value) {
