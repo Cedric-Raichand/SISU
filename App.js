@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
 import ProfileDetail from './src/components/pets/ProfileDetail';
 import RecordDetail from './src/components/health/RecordDetail';
+import PetCard from './src/components/pets/PetCard';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -1344,32 +1345,12 @@ export default function App() {
           </View>
         ) : (
           pets.map((pet) => (
-            <Pressable
-              key={pet.id}
-              style={styles.petCard}
-              onPress={() => openProfile(pet)}
-            >
-              <View style={styles.petCardEmoji}>
-                <Text style={styles.petEmoji}>
-                  {petEmoji(pet.species)}
-                </Text>
-              </View>
-
-              <View style={styles.petCardContent}>
-                <Text style={styles.petCardName}>{pet.name}</Text>
-                <Text style={styles.petCardSubtitle}>
-                  {[pet.species, pet.breed]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-                <Text style={styles.petCardMeta}>
-                  {pet.healthRecords.length} health record(s) ·{' '}
-                  {pet.vaccinations.length} vaccination(s)
-                </Text>
-              </View>
-
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            <PetCard
+            key={pet.id}
+            pet={pet}
+            emoji={petEmoji(pet.species)}
+            onPress={() => openProfile(pet)}
+           />
           ))
         )}
 
@@ -1756,46 +1737,11 @@ const styles = StyleSheet.create({
     color: '#667085',
     marginBottom: 14,
   },
-  petCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E7EEEA',
-  },
-  petCardEmoji: {
-    width: 54,
-    height: 54,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E8F5F0',
-    marginRight: 13,
-  },
+ 
   petEmoji: {
     fontSize: 28,
   },
-  petCardContent: {
-    flex: 1,
-  },
-  petCardName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#153E35',
-    marginBottom: 4,
-  },
-  petCardSubtitle: {
-    color: '#667085',
-    fontSize: 13,
-    marginBottom: 5,
-  },
-  petCardMeta: {
-    color: '#667085',
-    fontSize: 11,
-  },
+ 
   chevron: {
     fontSize: 28,
     color: '#98A2B3',
