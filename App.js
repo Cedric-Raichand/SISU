@@ -1,6 +1,5 @@
 
 import React, { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SafeAreaView,
   ScrollView,
@@ -13,12 +12,13 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'sisu_pets';
 
 const INITIAL_PETS = [
   {
-    id: '1',
+    id: 'pet-buddy',
     name: 'Buddy',
     species: 'Dog',
     breed: 'Golden Retriever',
@@ -28,6 +28,7 @@ const INITIAL_PETS = [
     weight: '',
     color: '',
     healthRecords: [],
+    vaccinations: [],
   },
 ];
 
@@ -52,6 +53,100 @@ const EMPTY_HEALTH_FORM = {
   notes: '',
 };
 
+const EMPTY_VACCINATION_FORM = {
+  vaccineName: '',
+  dateGiven: '',
+  nextDueDate: '',
+  veterinarian: '',
+  notes: '',
+};
+
+function createId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function getTodayString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
+function getVaccinationStatus(nextDueDate) {
+  if (!nextDueDate) {
+    return 'No due date set';
+  }
+
+  if (!isValidDate(nextDueDate)) {
+    return 'Check due date';
+  }
+
+  const today = getTodayString();
+
+  if (nextDueDate < today) {
+    return 'Overdue';
+  }
+
+  if (nextDueDate === today) {
+    return 'Due today';
+  }
+
+  return 'Upcoming';
+}
+
+function getVaccinationStatusColor(status) {
+  if (status === 'Overdue') {
+    return '#B42318';
+  }
+
+  if (status === 'Due today') {
+    return '#B54708';
+  }
+
+  if (status === 'Upcoming') {
+    return '#027A48';
+  }
+
+  return '#667085';
+}
+
+function normalizePet(pet) {
+  return {
+    id: pet.id || createId(),
+    name: pet.name || '',
+    species: pet.species || '',
+    breed: pet.breed || '',
+    age: pet.age || '',
+    dateOfBirth: pet.dateOfBirth || '',
+    sex: pet.sex || 'Unknown',
+    weight: pet.weight || '',
+    color: pet.color || '',
+    healthRecords: Array.isArray(pet.healthRecords)
+      ? pet.healthRecords
+      : [],
+    vaccinations: Array.isArray(pet.vaccinations)
+      ? pet.vaccinations
+      : [],
+  };
+}
+
 export default function App() {
   const [screen, setScreen] = useState('home');
   const [pets, setPets] = useState([]);
@@ -59,243 +154,217 @@ export default function App() {
 
   const [selectedPetId, setSelectedPetId] = useState(null);
   const [selectedRecordId, setSelectedRecordId] = useState(null);
+  const [selectedVaccinationId, setSelectedVaccinationId] =
+    useState(null);
 
-  const [petForm, setPetForm] = useState(EMPTY_PET_FORM);
-  const [healthForm, setHealthForm] = useState(EMPTY_HEALTH_FORM);
+  const [petForm, setPetForm] = useState({ ...EMPTY_PET_FORM });
+  const [healthForm, setHealthForm] = useState({
+    ...EMPTY_HEALTH_FORM,
+  });
+  const [vaccinationForm, setVaccinationForm] = useState({
+    ...EMPTY_VACCINATION_FORM,
+  });
 
-  const selectedPet = pets.find(
-    (pet) => pet.id === selectedPetId
-  );
+  const [editingPetId, setEditingPetId] = useState(null);
 
-  const healthRecords = selectedPet?.healthRecords || [];
-
-  const selectedRecord = healthRecords.find(
-    (record) => record.id === selectedRecordId
-  );
-
-  // Load pets and their health records from local storage.
   useEffect(() => {
-    async function loadPets() {
-      try {
-        const savedPets = await AsyncStorage.getItem(STORAGE_KEY);
-
-        if (savedPets !== null) {
-          const parsedPets = JSON.parse(savedPets);
-
-          if (Array.isArray(parsedPets)) {
-            const compatiblePets = parsedPets.map((pet) => ({
-              ...pet,
-              dateOfBirth: pet.dateOfBirth || '',
-              sex: pet.sex || 'Unknown',
-              weight: pet.weight || '',
-              color: pet.color || '',
-              healthRecords: Array.isArray(pet.healthRecords)
-                ? pet.healthRecords
-                : [],
-            }));
-
-            setPets(compatiblePets);
-          } else {
-            setPets(INITIAL_PETS);
-          }
-        } else {
-          setPets(INITIAL_PETS);
-        }
-      } catch (error) {
-        console.error('Error loading pets:', error);
-        Alert.alert(
-          'Storage Error',
-          'We could not load your saved pets.'
-        );
-        setPets(INITIAL_PETS);
-      } finally {
-        setPetsLoaded(true);
-      }
-    }
-
     loadPets();
   }, []);
 
-  // Save pet profiles and their health records.
   useEffect(() => {
-    if (!petsLoaded) return;
-
-    async function savePets() {
-      try {
-        await AsyncStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(pets)
-        );
-      } catch (error) {
-        console.error('Error saving pets:', error);
-        Alert.alert(
-          'Save Error',
-          'Your information could not be saved.'
-        );
-      }
+    if (!petsLoaded) {
+      return;
     }
 
     savePets();
   }, [pets, petsLoaded]);
 
-  // ---------------- PET PROFILE FUNCTIONS ----------------
+  async function loadPets() {
+    try {
+      const storedPets = await AsyncStorage.getItem(STORAGE_KEY);
 
-  function updatePetField(field, value) {
-    setPetForm((current) => ({
-      ...current,
+      if (storedPets) {
+        const parsedPets = JSON.parse(storedPets);
+
+        if (Array.isArray(parsedPets)) {
+          setPets(parsedPets.map(normalizePet));
+        } else {
+          setPets(INITIAL_PETS.map(normalizePet));
+        }
+      } else {
+        setPets(INITIAL_PETS.map(normalizePet));
+      }
+    } catch (error) {
+      console.error('Could not load pets:', error);
+      Alert.alert(
+        'Loading error',
+        'We could not load your saved pets.'
+      );
+      setPets(INITIAL_PETS.map(normalizePet));
+    } finally {
+      setPetsLoaded(true);
+    }
+  }
+
+  async function savePets() {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(pets));
+    } catch (error) {
+      console.error('Could not save pets:', error);
+      Alert.alert(
+        'Saving error',
+        'Your changes could not be saved locally.'
+      );
+    }
+  }
+
+  const selectedPet = pets.find(
+    (pet) => pet.id === selectedPetId
+  );
+
+  function updatePetForm(field, value) {
+    setPetForm((previous) => ({
+      ...previous,
       [field]: value,
     }));
   }
 
-  function updateHealthField(field, value) {
-    setHealthForm((current) => ({
-      ...current,
+  function updateHealthForm(field, value) {
+    setHealthForm((previous) => ({
+      ...previous,
       [field]: value,
     }));
   }
 
-  function resetPetForm() {
-    setPetForm(EMPTY_PET_FORM);
-  }
-
-  function resetHealthForm() {
-    setHealthForm(EMPTY_HEALTH_FORM);
-    setSelectedRecordId(null);
-  }
-
-  function goHome() {
-    resetPetForm();
-    resetHealthForm();
-    setScreen('home');
+  function updateVaccinationForm(field, value) {
+    setVaccinationForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
   }
 
   function openAddPet() {
-    resetPetForm();
+    setEditingPetId(null);
+    setPetForm({ ...EMPTY_PET_FORM });
     setScreen('addPet');
   }
 
-  function openPetProfile(pet) {
-    setSelectedPetId(pet.id);
-    setScreen('profile');
-  }
-
   function openEditPet(pet) {
-    setSelectedPetId(pet.id);
-
+    setEditingPetId(pet.id);
     setPetForm({
       name: pet.name || '',
       species: pet.species || '',
       breed: pet.breed || '',
-      age: pet.age || '',
+      age: String(pet.age || ''),
       dateOfBirth: pet.dateOfBirth || '',
       sex: pet.sex || 'Unknown',
-      weight: pet.weight || '',
+      weight: String(pet.weight || ''),
       color: pet.color || '',
     });
-
+    setSelectedPetId(pet.id);
     setScreen('editPet');
   }
 
   function savePet() {
     if (!petForm.name.trim() || !petForm.species.trim()) {
       Alert.alert(
-        'Missing Information',
-        'Pet name and species are required.'
+        'Missing information',
+        'Please enter your pet’s name and species.'
       );
       return;
     }
-
-    const weight = petForm.weight.trim();
 
     if (
-      weight &&
-      (!Number.isFinite(Number(weight)) || Number(weight) <= 0)
+      petForm.dateOfBirth.trim() &&
+      !isValidDate(petForm.dateOfBirth.trim())
     ) {
       Alert.alert(
-        'Invalid Weight',
-        'Enter a weight greater than zero, in kilograms.'
+        'Invalid date',
+        'Date of birth must use YYYY-MM-DD, for example 2024-06-15.'
       );
       return;
     }
 
-    const petDetails = {
-      name: petForm.name.trim(),
-      species: petForm.species.trim(),
-      breed: petForm.breed.trim() || 'Not specified',
-      age: petForm.age.trim() || 'Not specified',
-      dateOfBirth: petForm.dateOfBirth.trim(),
-      sex: petForm.sex,
-      weight,
-      color: petForm.color.trim() || 'Not specified',
-    };
-
-    if (screen === 'addPet') {
-      const newPet = {
-        id: `${Date.now()}-${Math.random()}`,
-        ...petDetails,
-        healthRecords: [],
-      };
-
-      setPets((current) => [...current, newPet]);
-      resetPetForm();
-      setScreen('home');
-
-      Alert.alert(
-        'Success',
-        `${newPet.name} has been added to Sisu.`
-      );
-      return;
-    }
-
-    if (screen === 'editPet' && selectedPetId) {
-      setPets((current) =>
-        current.map((pet) =>
-          pet.id === selectedPetId
-            ? { ...pet, ...petDetails }
+    if (editingPetId) {
+      setPets((previous) =>
+        previous.map((pet) =>
+          pet.id === editingPetId
+            ? {
+                ...pet,
+                ...petForm,
+                name: petForm.name.trim(),
+                species: petForm.species.trim(),
+              }
             : pet
         )
       );
 
-      resetPetForm();
+      setSelectedPetId(editingPetId);
       setScreen('profile');
-
-      Alert.alert(
-        'Success',
-        'Pet profile updated successfully.'
-      );
+      return;
     }
+
+    const newPet = normalizePet({
+      ...petForm,
+      id: createId(),
+      name: petForm.name.trim(),
+      species: petForm.species.trim(),
+      healthRecords: [],
+      vaccinations: [],
+    });
+
+    setPets((previous) => [...previous, newPet]);
+    setSelectedPetId(newPet.id);
+    setPetForm({ ...EMPTY_PET_FORM });
+    setScreen('profile');
   }
 
-  // ---------------- HEALTH RECORD FUNCTIONS ----------------
+  function openProfile(pet) {
+    setSelectedPetId(pet.id);
+    setScreen('profile');
+  }
+
+  function deletePet(petId) {
+    Alert.alert(
+      'Delete pet',
+      'Are you sure you want to delete this pet and its associated records?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setPets((previous) =>
+              previous.filter((pet) => pet.id !== petId)
+            );
+
+            if (selectedPetId === petId) {
+              setSelectedPetId(null);
+            }
+
+            setScreen('home');
+          },
+        },
+      ]
+    );
+  }
 
   function openHealthRecords(pet) {
     setSelectedPetId(pet.id);
-    resetHealthForm();
     setScreen('healthRecords');
   }
 
   function openAddHealthRecord() {
-    resetHealthForm();
-
-    // Use today's date as a convenient starting value.
-    const today = new Date();
-    const localDate = [
-      today.getFullYear(),
-      String(today.getMonth() + 1).padStart(2, '0'),
-      String(today.getDate()).padStart(2, '0'),
-    ].join('-');
-
+    setSelectedRecordId(null);
     setHealthForm({
       ...EMPTY_HEALTH_FORM,
-      date: localDate,
+      date: getTodayString(),
     });
-
     setScreen('addHealthRecord');
   }
 
   function openEditHealthRecord(record) {
     setSelectedRecordId(record.id);
-
     setHealthForm({
       date: record.date || '',
       reason: record.reason || '',
@@ -305,150 +374,91 @@ export default function App() {
       veterinarian: record.veterinarian || '',
       notes: record.notes || '',
     });
-
     setScreen('editHealthRecord');
   }
 
   function saveHealthRecord() {
-    if (!selectedPetId) {
+    if (!selectedPet) {
       Alert.alert('Error', 'Please select a pet first.');
       return;
     }
 
-    if (!healthForm.date.trim() || !healthForm.reason.trim()) {
-      Alert.alert(
-        'Missing Information',
-        'Visit date and reason are required.'
-      );
-      return;
-    }
-
-    // Validate YYYY-MM-DD and reject impossible calendar dates.
-    const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
-    const match = healthForm.date.trim().match(datePattern);
-
-    if (!match) {
-      Alert.alert(
-        'Invalid Date',
-        'Enter the date in YYYY-MM-DD format.'
-      );
-      return;
-    }
-
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const parsedDate = new Date(Date.UTC(year, month - 1, day));
-
     if (
-      parsedDate.getUTCFullYear() !== year ||
-      parsedDate.getUTCMonth() !== month - 1 ||
-      parsedDate.getUTCDate() !== day
+      !healthForm.date.trim() ||
+      !isValidDate(healthForm.date.trim())
     ) {
       Alert.alert(
-        'Invalid Date',
-        'Please enter a real calendar date.'
+        'Invalid date',
+        'Enter a valid date using YYYY-MM-DD.'
       );
       return;
     }
 
-    const recordDetails = {
+    if (!healthForm.reason.trim()) {
+      Alert.alert(
+        'Missing information',
+        'Please enter the reason for the visit.'
+      );
+      return;
+    }
+
+    const record = {
+      id: selectedRecordId || createId(),
+      ...healthForm,
       date: healthForm.date.trim(),
       reason: healthForm.reason.trim(),
-      diagnosis: healthForm.diagnosis.trim(),
-      treatment: healthForm.treatment.trim(),
-      medication: healthForm.medication.trim(),
-      veterinarian: healthForm.veterinarian.trim(),
-      notes: healthForm.notes.trim(),
     };
 
-    if (screen === 'addHealthRecord') {
-      const newRecord = {
-        id: `${Date.now()}-${Math.random()}`,
-        ...recordDetails,
-        createdAt: new Date().toISOString(),
-      };
+    setPets((previous) =>
+      previous.map((pet) => {
+        if (pet.id !== selectedPetId) {
+          return pet;
+        }
 
-      setPets((current) =>
-        current.map((pet) =>
-          pet.id === selectedPetId
-            ? {
-                ...pet,
-                healthRecords: [
-                  ...(pet.healthRecords || []),
-                  newRecord,
-                ],
-              }
-            : pet
-        )
-      );
+        const currentRecords = Array.isArray(pet.healthRecords)
+          ? pet.healthRecords
+          : [];
 
-      resetHealthForm();
-      setScreen('healthRecords');
-
-      Alert.alert(
-        'Success',
-        'Health record added successfully.'
-      );
-      return;
-    }
-
-    if (screen === 'editHealthRecord' && selectedRecordId) {
-      setPets((current) =>
-        current.map((pet) => {
-          if (pet.id !== selectedPetId) return pet;
-
+        if (selectedRecordId) {
           return {
             ...pet,
-            healthRecords: (pet.healthRecords || []).map(
-              (record) =>
-                record.id === selectedRecordId
-                  ? { ...record, ...recordDetails }
-                  : record
+            healthRecords: currentRecords.map((item) =>
+              item.id === selectedRecordId ? record : item
             ),
           };
-        })
-      );
+        }
 
-      resetHealthForm();
-      setScreen('healthRecords');
+        return {
+          ...pet,
+          healthRecords: [...currentRecords, record],
+        };
+      })
+    );
 
-      Alert.alert(
-        'Success',
-        'Health record updated successfully.'
-      );
-    }
+    setScreen('healthRecords');
   }
 
   function deleteHealthRecord(recordId) {
     Alert.alert(
-      'Delete Health Record',
+      'Delete health record',
       'Are you sure you want to delete this medical record?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            setPets((current) =>
-              current.map((pet) =>
+            setPets((previous) =>
+              previous.map((pet) =>
                 pet.id === selectedPetId
                   ? {
                       ...pet,
-                      healthRecords: (
-                        pet.healthRecords || []
-                      ).filter((record) => record.id !== recordId),
+                      healthRecords: pet.healthRecords.filter(
+                        (record) => record.id !== recordId
+                      ),
                     }
                   : pet
               )
-            );
-
-            Alert.alert(
-              'Deleted',
-              'Health record deleted successfully.'
             );
           },
         },
@@ -456,21 +466,200 @@ export default function App() {
     );
   }
 
-  // ---------------- REUSABLE UI ----------------
+  function openVaccinations(pet) {
+    setSelectedPetId(pet.id);
+    setScreen('vaccinations');
+  }
 
-  function renderButton(label, onPress, secondary = false) {
+  function openAddVaccination() {
+    setSelectedVaccinationId(null);
+    setVaccinationForm({
+      ...EMPTY_VACCINATION_FORM,
+      dateGiven: getTodayString(),
+    });
+    setScreen('addVaccination');
+  }
+
+  function openEditVaccination(vaccination) {
+    setSelectedVaccinationId(vaccination.id);
+    setVaccinationForm({
+      vaccineName: vaccination.vaccineName || '',
+      dateGiven: vaccination.dateGiven || '',
+      nextDueDate: vaccination.nextDueDate || '',
+      veterinarian: vaccination.veterinarian || '',
+      notes: vaccination.notes || '',
+    });
+    setScreen('editVaccination');
+  }
+
+  function saveVaccination() {
+    if (!selectedPet) {
+      Alert.alert('Error', 'Please select a pet first.');
+      return;
+    }
+
+    const vaccineName = vaccinationForm.vaccineName.trim();
+    const dateGiven = vaccinationForm.dateGiven.trim();
+    const nextDueDate = vaccinationForm.nextDueDate.trim();
+
+    if (!vaccineName) {
+      Alert.alert(
+        'Missing information',
+        'Please enter the vaccine name.'
+      );
+      return;
+    }
+
+    if (!dateGiven || !isValidDate(dateGiven)) {
+      Alert.alert(
+        'Invalid vaccination date',
+        'Enter a valid date using YYYY-MM-DD, for example 2026-10-09.'
+      );
+      return;
+    }
+
+    if (nextDueDate && !isValidDate(nextDueDate)) {
+      Alert.alert(
+        'Invalid due date',
+        'Enter a valid next due date using YYYY-MM-DD, or leave it empty.'
+      );
+      return;
+    }
+
+    if (nextDueDate && nextDueDate < dateGiven) {
+      Alert.alert(
+        'Check the dates',
+        'The next due date cannot be earlier than the date the vaccine was given.'
+      );
+      return;
+    }
+
+    const vaccination = {
+      id: selectedVaccinationId || createId(),
+      vaccineName,
+      dateGiven,
+      nextDueDate,
+      veterinarian: vaccinationForm.veterinarian.trim(),
+      notes: vaccinationForm.notes.trim(),
+    };
+
+    setPets((previous) =>
+      previous.map((pet) => {
+        if (pet.id !== selectedPetId) {
+          return pet;
+        }
+
+        const currentVaccinations = Array.isArray(pet.vaccinations)
+          ? pet.vaccinations
+          : [];
+
+        if (selectedVaccinationId) {
+          return {
+            ...pet,
+            vaccinations: currentVaccinations.map((item) =>
+              item.id === selectedVaccinationId
+                ? vaccination
+                : item
+            ),
+          };
+        }
+
+        return {
+          ...pet,
+          vaccinations: [
+            ...currentVaccinations,
+            vaccination,
+          ],
+        };
+      })
+    );
+
+    setScreen('vaccinations');
+  }
+
+  function deleteVaccination(vaccinationId) {
+    Alert.alert(
+      'Delete vaccination',
+      'Are you sure you want to delete this vaccination record?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setPets((previous) =>
+              previous.map((pet) =>
+                pet.id === selectedPetId
+                  ? {
+                      ...pet,
+                      vaccinations: pet.vaccinations.filter(
+                        (vaccination) =>
+                          vaccination.id !== vaccinationId
+                      ),
+                    }
+                  : pet
+              )
+            );
+          },
+        },
+      ]
+    );
+  }
+
+  function getAllVaccinationReminders() {
+    const reminders = [];
+
+    pets.forEach((pet) => {
+      (pet.vaccinations || []).forEach((vaccination) => {
+        const status = getVaccinationStatus(
+          vaccination.nextDueDate
+        );
+
+        if (
+          status === 'Overdue' ||
+          status === 'Due today' ||
+          status === 'Upcoming'
+        ) {
+          reminders.push({
+            ...vaccination,
+            petId: pet.id,
+            petName: pet.name,
+            status,
+          });
+        }
+      });
+    });
+
+    return reminders.sort((a, b) => {
+      if (a.nextDueDate !== b.nextDueDate) {
+        return a.nextDueDate.localeCompare(b.nextDueDate);
+      }
+
+      return a.petName.localeCompare(b.petName);
+    });
+  }
+
+  function renderButton(
+    label,
+    onPress,
+    variant = 'primary',
+    extraStyle = {}
+  ) {
     return (
       <Pressable
         onPress={onPress}
         style={[
           styles.button,
-          secondary && styles.secondaryButton,
+          variant === 'secondary' && styles.secondaryButton,
+          variant === 'danger' && styles.dangerButton,
+          extraStyle,
         ]}
       >
         <Text
           style={[
             styles.buttonText,
-            secondary && styles.secondaryButtonText,
+            variant === 'secondary' &&
+              styles.secondaryButtonText,
           ]}
         >
           {label}
@@ -483,19 +672,18 @@ export default function App() {
     label,
     field,
     placeholder,
-    options = {}
+    keyboardType = 'default'
   ) {
     return (
-      <View>
-        <Text style={styles.label}>{label}</Text>
+      <View style={styles.inputGroup} key={field}>
+        <Text style={styles.inputLabel}>{label}</Text>
         <TextInput
           style={styles.input}
+          value={String(petForm[field] ?? '')}
+          onChangeText={(value) => updatePetForm(field, value)}
           placeholder={placeholder}
-          placeholderTextColor="#999"
-          value={petForm[field]}
-          onChangeText={(value) => updatePetField(field, value)}
-          keyboardType={options.keyboardType || 'default'}
-          autoCapitalize={options.autoCapitalize || 'sentences'}
+          keyboardType={keyboardType}
+          placeholderTextColor="#98A2B3"
         />
       </View>
     );
@@ -508,273 +696,271 @@ export default function App() {
     multiline = false
   ) {
     return (
-      <View>
-        <Text style={styles.label}>{label}</Text>
+      <View style={styles.inputGroup} key={field}>
+        <Text style={styles.inputLabel}>{label}</Text>
         <TextInput
           style={[
             styles.input,
             multiline && styles.multilineInput,
           ]}
-          placeholder={placeholder}
-          placeholderTextColor="#999"
-          value={healthForm[field]}
+          value={healthForm[field] || ''}
           onChangeText={(value) =>
-            updateHealthField(field, value)
+            updateHealthForm(field, value)
           }
+          placeholder={placeholder}
+          placeholderTextColor="#98A2B3"
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
-          autoCapitalize="sentences"
+        />
+      </View>
+    );
+  }
+
+  function renderVaccinationInput(
+    label,
+    field,
+    placeholder,
+    multiline = false
+  ) {
+    return (
+      <View style={styles.inputGroup} key={field}>
+        <Text style={styles.inputLabel}>{label}</Text>
+        <TextInput
+          style={[
+            styles.input,
+            multiline && styles.multilineInput,
+          ]}
+          value={vaccinationForm[field] || ''}
+          onChangeText={(value) =>
+            updateVaccinationForm(field, value)
+          }
+          placeholder={placeholder}
+          placeholderTextColor="#98A2B3"
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
         />
       </View>
     );
   }
 
   function petEmoji(species) {
-    const value = species?.toLowerCase();
+    const value = (species || '').toLowerCase();
 
-    if (value?.includes('dog')) return '🐕';
-    if (value?.includes('cat')) return '🐈';
-    if (value?.includes('bird')) return '🐦';
-    if (value?.includes('rabbit')) return '🐇';
-    if (value?.includes('fish')) return '🐟';
-    if (value?.includes('turtle')) return '🐢';
+    if (value.includes('dog')) return '🐕';
+    if (value.includes('cat')) return '🐈';
+    if (value.includes('bird')) return '🐦';
+    if (value.includes('rabbit')) return '🐇';
+    if (value.includes('fish')) return '🐠';
+    if (value.includes('horse')) return '🐎';
 
     return '🐾';
   }
 
-  // ---------------- PET FORM ----------------
+  function renderHeader(title, subtitle = '') {
+    return (
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>{title}</Text>
+        {!!subtitle && (
+          <Text style={styles.pageSubtitle}>{subtitle}</Text>
+        )}
+      </View>
+    );
+  }
 
   function renderPetForm() {
-    const isEditing = screen === 'editPet';
+    const editing = screen === 'editPet';
 
     return (
       <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>
-          {isEditing ? 'UPDATE INFORMATION' : 'NEW COMPANION'}
-        </Text>
+        {renderHeader(
+          editing ? 'Edit Pet Profile' : 'Add a Pet',
+          'Keep your pet’s important information in one place.'
+        )}
 
-        <Text style={styles.heading}>
-          {isEditing ? 'Edit Pet Profile' : 'Add a Pet'}
-        </Text>
-
-        <Text style={styles.subtitle}>
-          Tell us a little more about your companion.
-        </Text>
-
-        <View style={styles.formCard}>
-          {renderPetInput('Pet Name *', 'name', 'e.g. Luna')}
+        <View style={styles.card}>
+          {renderPetInput('Pet name *', 'name', 'e.g. Buddy')}
           {renderPetInput(
             'Species *',
             'species',
-            'e.g. Dog or Cat'
+            'e.g. Dog, Cat, Bird'
           )}
           {renderPetInput(
             'Breed',
             'breed',
             'e.g. Golden Retriever'
           )}
-          {renderPetInput('Age', 'age', 'e.g. 2 years')}
+          {renderPetInput('Age', 'age', 'Age in years', 'numeric')}
           {renderPetInput(
-            'Date of Birth',
+            'Date of birth',
             'dateOfBirth',
-            'YYYY-MM-DD',
-            { autoCapitalize: 'none' }
+            'YYYY-MM-DD'
           )}
-
-          <Text style={styles.helper}>
-            Date format: YYYY-MM-DD.
-          </Text>
-
-          <Text style={styles.label}>Sex</Text>
-          <View style={styles.choiceRow}>
-            {['Male', 'Female', 'Unknown'].map((option) => (
-              <Pressable
-                key={option}
-                onPress={() => updatePetField('sex', option)}
-                style={[
-                  styles.choiceButton,
-                  petForm.sex === option && styles.choiceSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.choiceText,
-                    petForm.sex === option &&
-                      styles.choiceTextSelected,
-                  ]}
-                >
-                  {option}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
+          {renderPetInput('Sex', 'sex', 'Male, Female, Unknown')}
           {renderPetInput(
-            'Weight (kg)',
+            'Weight',
             'weight',
-            'e.g. 4.5',
-            { keyboardType: 'decimal-pad' }
+            'e.g. 12 kg'
           )}
-
           {renderPetInput(
-            'Color / Markings',
+            'Color / markings',
             'color',
-            'e.g. Brown with white paws'
+            'e.g. Brown and white'
           )}
-
-          <Text style={styles.helper}>
-            Only pet name and species are required.
-          </Text>
 
           {renderButton(
-            isEditing ? 'Save Changes' : 'Add Pet',
+            editing ? 'Save Changes' : 'Add Pet',
             savePet
           )}
-          {renderButton('Cancel', goHome, true)}
+          {renderButton(
+            'Cancel',
+            () =>
+              setScreen(editing ? 'profile' : 'home'),
+            'secondary'
+          )}
         </View>
       </ScrollView>
     );
   }
-
-  // ---------------- PET PROFILE ----------------
 
   function renderProfile() {
     if (!selectedPet) {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.heading}>Pet not found</Text>
-          {renderButton('Back to Home', goHome)}
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Pet not found</Text>
+          {renderButton('Back Home', () => setScreen('home'))}
         </View>
       );
     }
 
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-      >
-        <Text style={styles.eyebrow}>YOUR COMPANION</Text>
-        <Text style={styles.heading}>Pet Profile</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader('Pet Profile', 'Your companion’s details')}
 
-        <View style={styles.profileCard}>
-          <View style={styles.petAvatar}>
-            <Text style={styles.avatarEmoji}>
-              {petEmoji(selectedPet.species)}
-            </Text>
-          </View>
-
-          <Text style={styles.profileName}>
+        <View style={styles.profileHero}>
+          <Text style={styles.petEmojiLarge}>
+            {petEmoji(selectedPet.species)}
+          </Text>
+          <Text style={styles.profilePetName}>
             {selectedPet.name}
           </Text>
-          <Text style={styles.profileSpecies}>
-            {selectedPet.species}
+          <Text style={styles.profilePetSubtitle}>
+            {[selectedPet.species, selectedPet.breed]
+              .filter(Boolean)
+              .join(' · ')}
           </Text>
+        </View>
 
-          <View style={styles.divider} />
-
-          <ProfileDetail label="Pet Name" value={selectedPet.name} />
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            About {selectedPet.name}
+          </Text>
           <ProfileDetail label="Species" value={selectedPet.species} />
           <ProfileDetail label="Breed" value={selectedPet.breed} />
           <ProfileDetail label="Age" value={selectedPet.age} />
           <ProfileDetail
-            label="Date of Birth"
-            value={selectedPet.dateOfBirth || 'Not provided'}
+            label="Date of birth"
+            value={selectedPet.dateOfBirth}
           />
-          <ProfileDetail
-            label="Sex"
-            value={selectedPet.sex || 'Unknown'}
-          />
-          <ProfileDetail
-            label="Weight"
-            value={
-              selectedPet.weight
-                ? `${selectedPet.weight} kg`
-                : 'Not provided'
-            }
-          />
-          <ProfileDetail
-            label="Color / Markings"
-            value={selectedPet.color || 'Not specified'}
-          />
+          <ProfileDetail label="Sex" value={selectedPet.sex} />
+          <ProfileDetail label="Weight" value={selectedPet.weight} />
+          <ProfileDetail label="Color / markings" value={selectedPet.color} />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Health management</Text>
 
           {renderButton(
-            '🩺 View Health Records',
+            '📋 View Medical History',
             () => openHealthRecords(selectedPet)
           )}
 
           {renderButton(
-            'Edit Pet Profile',
-            () => openEditPet(selectedPet),
-            true
+            '💉 View Vaccinations',
+            () => openVaccinations(selectedPet),
+            'secondary'
           )}
 
-          {renderButton('Back to Home', goHome, true)}
+          {renderButton(
+            '✏️ Edit Pet Profile',
+            () => openEditPet(selectedPet),
+            'secondary'
+          )}
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Record summary</Text>
+          <Text style={styles.summaryText}>
+            Medical records: {selectedPet.healthRecords.length}
+          </Text>
+          <Text style={styles.summaryText}>
+            Vaccinations: {selectedPet.vaccinations.length}
+          </Text>
+        </View>
+
+        {renderButton(
+          'Delete Pet',
+          () => deletePet(selectedPet.id),
+          'danger'
+        )}
+        {renderButton(
+          'Back to Dashboard',
+          () => setScreen('home'),
+          'secondary'
+        )}
       </ScrollView>
     );
   }
 
-  // ---------------- HEALTH RECORD LIST ----------------
-
   function renderHealthRecords() {
     if (!selectedPet) {
       return (
-        <View style={styles.centered}>
-          <Text style={styles.heading}>Pet not found</Text>
-          {renderButton('Back to Home', goHome)}
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Pet not found</Text>
+          {renderButton('Back Home', () => setScreen('home'))}
         </View>
       );
     }
 
-    const sortedRecords = [...healthRecords].sort((a, b) =>
+    const records = [...selectedPet.healthRecords].sort((a, b) =>
       (b.date || '').localeCompare(a.date || '')
     );
 
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-      >
-        <Text style={styles.eyebrow}>MEDICAL HISTORY</Text>
-        <Text style={styles.heading}>Health Records</Text>
-        <Text style={styles.subtitle}>
-          Medical history for {selectedPet.name}.
-        </Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          `${selectedPet.name}’s Medical History`,
+          'Appointments, diagnoses, treatments, and medications.'
+        )}
 
         {renderButton(
           '+ Add Health Record',
           openAddHealthRecord
         )}
 
-        {sortedRecords.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>🩺</Text>
+        {records.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>📋</Text>
             <Text style={styles.emptyTitle}>
-              No health records yet
+              No medical records yet
             </Text>
-            <Text style={styles.emptyDescription}>
-              Add a veterinary visit or medical record for{' '}
-              {selectedPet.name}.
+            <Text style={styles.emptyText}>
+              Add a record after a veterinary visit or treatment.
             </Text>
           </View>
         ) : (
-          sortedRecords.map((record) => (
-            <View key={record.id} style={styles.recordCard}>
+          records.map((record) => (
+            <View style={styles.recordCard} key={record.id}>
               <View style={styles.recordHeader}>
-                <View style={styles.recordDateBadge}>
-                  <Text style={styles.recordDateText}>
-                    {record.date}
-                  </Text>
-                </View>
+                <Text style={styles.recordTitle}>
+                  {record.reason}
+                </Text>
+                <Text style={styles.recordDate}>
+                  {record.date}
+                </Text>
               </View>
-
-              <Text style={styles.recordTitle}>
-                {record.reason}
-              </Text>
 
               <RecordDetail
                 label="Diagnosis"
@@ -792,30 +978,23 @@ export default function App() {
                 label="Veterinarian"
                 value={record.veterinarian}
               />
-              <RecordDetail
-                label="Notes"
-                value={record.notes}
-              />
+              <RecordDetail label="Notes" value={record.notes} />
 
-              <View style={styles.recordActions}>
-                <Pressable
-                  style={styles.smallButton}
-                  onPress={() => openEditHealthRecord(record)}
-                >
-                  <Text style={styles.smallButtonText}>Edit</Text>
-                </Pressable>
-
-                <Pressable
-                  style={[
-                    styles.smallButton,
-                    styles.deleteButton,
-                  ]}
-                  onPress={() => deleteHealthRecord(record.id)}
-                >
-                  <Text style={styles.deleteButtonText}>
-                    Delete
-                  </Text>
-                </Pressable>
+              <View style={styles.buttonRow}>
+                <View style={styles.buttonHalf}>
+                  {renderButton(
+                    'Edit',
+                    () => openEditHealthRecord(record),
+                    'secondary'
+                  )}
+                </View>
+                <View style={styles.buttonHalf}>
+                  {renderButton(
+                    'Delete',
+                    () => deleteHealthRecord(record.id),
+                    'danger'
+                  )}
+                </View>
               </View>
             </View>
           ))
@@ -824,156 +1003,339 @@ export default function App() {
         {renderButton(
           'Back to Pet Profile',
           () => setScreen('profile'),
-          true
+          'secondary'
         )}
       </ScrollView>
     );
   }
 
-  // ---------------- ADD / EDIT HEALTH RECORD FORM ----------------
-
-  function renderHealthForm() {
-    const isEditing = screen === 'editHealthRecord';
+  function renderHealthRecordForm() {
+    const editing = screen === 'editHealthRecord';
 
     return (
       <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.eyebrow}>MEDICAL HISTORY</Text>
+        {renderHeader(
+          editing ? 'Edit Health Record' : 'Add Health Record',
+          selectedPet
+            ? `Record details for ${selectedPet.name}`
+            : 'Enter the health record details.'
+        )}
 
-        <Text style={styles.heading}>
-          {isEditing ? 'Edit Health Record' : 'New Health Record'}
-        </Text>
-
-        <Text style={styles.subtitle}>
-          {selectedPet
-            ? `Record a visit or treatment for ${selectedPet.name}.`
-            : 'Record a veterinary visit.'}
-        </Text>
-
-        <View style={styles.formCard}>
+        <View style={styles.card}>
+          {renderHealthInput('Date *', 'date', 'YYYY-MM-DD')}
           {renderHealthInput(
-            'Visit Date * (YYYY-MM-DD)',
-            'date',
-            'e.g. 2026-10-09'
-          )}
-
-          {renderHealthInput(
-            'Reason for Visit *',
+            'Reason for visit *',
             'reason',
-            'e.g. Annual check-up'
+            'e.g. Routine check-up'
           )}
-
           {renderHealthInput(
             'Diagnosis',
             'diagnosis',
-            'Diagnosis provided by the veterinarian',
-            true
+            'Diagnosis provided by the vet'
           )}
-
           {renderHealthInput(
             'Treatment',
             'treatment',
-            'Treatment or procedure performed',
-            true
+            'Treatment or procedure'
           )}
-
           {renderHealthInput(
             'Medication',
             'medication',
-            'Medication and dosage, if prescribed',
-            true
+            'Medication details, if any'
           )}
-
           {renderHealthInput(
             'Veterinarian',
             'veterinarian',
-            'Veterinarian or clinic name'
+            'Veterinarian’s name'
           )}
-
           {renderHealthInput(
-            'Veterinarian Notes',
+            'Notes',
             'notes',
-            'Additional observations or instructions',
+            'Additional information',
             true
           )}
 
-          <Text style={styles.helper}>
-            Visit date and reason are required. Only record
-            diagnoses and treatments provided by a qualified
-            veterinary professional.
-          </Text>
-
           {renderButton(
-            isEditing ? 'Save Changes' : 'Save Health Record',
+            editing ? 'Save Changes' : 'Save Health Record',
             saveHealthRecord
           )}
-
           {renderButton(
             'Cancel',
             () => setScreen('healthRecords'),
-            true
+            'secondary'
           )}
         </View>
       </ScrollView>
     );
   }
 
-  // ---------------- HOME DASHBOARD ----------------
+  function renderVaccinations() {
+    if (!selectedPet) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Pet not found</Text>
+          {renderButton('Back Home', () => setScreen('home'))}
+        </View>
+      );
+    }
 
-  function renderHome() {
+    const vaccinations = [...selectedPet.vaccinations].sort(
+      (a, b) => {
+        const dateA = a.nextDueDate || a.dateGiven || '';
+        const dateB = b.nextDueDate || b.dateGiven || '';
+        return dateA.localeCompare(dateB);
+      }
+    );
+
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-      >
-        <View style={styles.topBar}>
-          <View>
-            <Text style={styles.logo}>sisu</Text>
-            <Text style={styles.tagline}>
-              Better care for your companions.
-            </Text>
-          </View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          `${selectedPet.name}’s Vaccinations`,
+          'Keep a record of vaccines and their next due dates.'
+        )}
 
-          <View style={styles.logoIcon}>
-            <Text style={styles.logoEmoji}>🐾</Text>
-          </View>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Reminder guide</Text>
+          <Text style={styles.helperText}>
+            Sisu checks the due dates saved in each record and displays
+            the status here. These are in-app reminders, not push
+            notifications.
+          </Text>
         </View>
 
-        <View style={styles.welcomeCard}>
-          <Text style={styles.welcomeSmall}>WELCOME TO SISU</Text>
-          <Text style={styles.welcomeHeading}>
-            Every pet deserves{'\n'}a healthy life.
+        {renderButton(
+          '+ Add Vaccination',
+          openAddVaccination
+        )}
+
+        {vaccinations.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>💉</Text>
+            <Text style={styles.emptyTitle}>
+              No vaccinations recorded
+            </Text>
+            <Text style={styles.emptyText}>
+              Add a vaccination using the information from your
+              veterinarian.
+            </Text>
+          </View>
+        ) : (
+          vaccinations.map((vaccination) => {
+            const status = getVaccinationStatus(
+              vaccination.nextDueDate
+            );
+
+            return (
+              <View
+                style={styles.vaccinationCard}
+                key={vaccination.id}
+              >
+                <View style={styles.recordHeader}>
+                  <Text style={styles.recordTitle}>
+                    💉 {vaccination.vaccineName}
+                  </Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        borderColor:
+                          getVaccinationStatusColor(status),
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        {
+                          color:
+                            getVaccinationStatusColor(status),
+                        },
+                      ]}
+                    >
+                      {status}
+                    </Text>
+                  </View>
+                </View>
+
+                <RecordDetail
+                  label="Date given"
+                  value={vaccination.dateGiven}
+                />
+                <RecordDetail
+                  label="Next due date"
+                  value={vaccination.nextDueDate || 'Not set'}
+                />
+                <RecordDetail
+                  label="Veterinarian"
+                  value={vaccination.veterinarian}
+                />
+                <RecordDetail
+                  label="Notes"
+                  value={vaccination.notes}
+                />
+
+                <View style={styles.buttonRow}>
+                  <View style={styles.buttonHalf}>
+                    {renderButton(
+                      'Edit',
+                      () => openEditVaccination(vaccination),
+                      'secondary'
+                    )}
+                  </View>
+                  <View style={styles.buttonHalf}>
+                    {renderButton(
+                      'Delete',
+                      () => deleteVaccination(vaccination.id),
+                      'danger'
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
+
+        {renderButton(
+          'Back to Pet Profile',
+          () => setScreen('profile'),
+          'secondary'
+        )}
+      </ScrollView>
+    );
+  }
+
+  function renderVaccinationForm() {
+    const editing = screen === 'editVaccination';
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {renderHeader(
+          editing ? 'Edit Vaccination' : 'Add Vaccination',
+          selectedPet
+            ? `Vaccination details for ${selectedPet.name}`
+            : 'Enter vaccination details.'
+        )}
+
+        <View style={styles.card}>
+          {renderVaccinationInput(
+            'Vaccine name *',
+            'vaccineName',
+            'e.g. Vaccine name from the vet record'
+          )}
+
+          {renderVaccinationInput(
+            'Date given *',
+            'dateGiven',
+            'YYYY-MM-DD'
+          )}
+
+          {renderVaccinationInput(
+            'Next due date',
+            'nextDueDate',
+            'YYYY-MM-DD, or leave empty'
+          )}
+
+          <Text style={styles.helperText}>
+            Use the dates provided by your veterinarian. If no next
+            due date has been specified, leave this field empty.
           </Text>
-          <Text style={styles.welcomeDescription}>
-            Keep your pets' information together in one place.
+
+          {renderVaccinationInput(
+            'Veterinarian',
+            'veterinarian',
+            'Veterinarian or clinic name'
+          )}
+
+          {renderVaccinationInput(
+            'Notes',
+            'notes',
+            'Batch number or other details, if known',
+            true
+          )}
+
+          {renderButton(
+            editing ? 'Save Changes' : 'Save Vaccination',
+            saveVaccination
+          )}
+
+          {renderButton(
+            'Cancel',
+            () => setScreen('vaccinations'),
+            'secondary'
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderHome() {
+    const reminders = getAllVaccinationReminders();
+    const urgentReminders = reminders.filter(
+      (item) =>
+        item.status === 'Overdue' ||
+        item.status === 'Due today'
+    );
+
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.hero}>
+          <Text style={styles.brandName}>Sisu 🐾</Text>
+          <Text style={styles.heroTitle}>
+            Better care for your best friend.
           </Text>
+          <Text style={styles.heroSubtitle}>
+            Manage your pets’ profiles, medical records, and
+            vaccination dates in one place.
+          </Text>
+
+          {renderButton('+ Add a Pet', openAddPet)}
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{pets.length}</Text>
+            <Text style={styles.statLabel}>Pets</Text>
+          </View>
+
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>
+              {pets.reduce(
+                (total, pet) => total + pet.healthRecords.length,
+                0
+              )}
+            </Text>
+            <Text style={styles.statLabel}>Health records</Text>
+          </View>
+
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>
+              {urgentReminders.length}
+            </Text>
+            <Text style={styles.statLabel}>Due / overdue</Text>
+          </View>
         </View>
 
         <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>My Pets</Text>
-            <Text style={styles.sectionSubtitle}>
-              Your beloved companions
-            </Text>
-          </View>
-
-          <Pressable
-            style={styles.addButton}
-            onPress={openAddPet}
-          >
-            <Text style={styles.addButtonText}>+ Add Pet</Text>
-          </Pressable>
+          <Text style={styles.sectionTitle}>My Pets</Text>
+          <Text style={styles.sectionHint}>
+            {pets.length} {pets.length === 1 ? 'pet' : 'pets'}
+          </Text>
         </View>
 
         {pets.length === 0 ? (
-          <View style={styles.emptyCard}>
+          <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🐾</Text>
-            <Text style={styles.emptyTitle}>No pets yet</Text>
-            <Text style={styles.emptyDescription}>
-              Add your first pet to start building their profile.
+            <Text style={styles.emptyTitle}>
+              Your pet family starts here
+            </Text>
+            <Text style={styles.emptyText}>
+              Add your first pet to begin keeping track of their care.
             </Text>
             {renderButton('Add Your First Pet', openAddPet)}
           </View>
@@ -982,24 +1344,24 @@ export default function App() {
             <Pressable
               key={pet.id}
               style={styles.petCard}
-              onPress={() => openPetProfile(pet)}
+              onPress={() => openProfile(pet)}
             >
-              <View style={styles.petIcon}>
-                <Text style={styles.petCardEmoji}>
+              <View style={styles.petCardEmoji}>
+                <Text style={styles.petEmoji}>
                   {petEmoji(pet.species)}
                 </Text>
               </View>
 
-              <View style={styles.petInfo}>
-                <Text style={styles.petName}>{pet.name}</Text>
-                <Text style={styles.petDescription}>
-                  {pet.breed || 'Breed not specified'}
+              <View style={styles.petCardContent}>
+                <Text style={styles.petCardName}>{pet.name}</Text>
+                <Text style={styles.petCardSubtitle}>
+                  {[pet.species, pet.breed]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Text>
-                <Text style={styles.petAge}>
-                  {pet.species} · {pet.age || 'Age not provided'}
-                </Text>
-                <Text style={styles.recordCount}>
-                  {(pet.healthRecords || []).length} health record(s)
+                <Text style={styles.petCardMeta}>
+                  {pet.healthRecords.length} health record(s) ·{' '}
+                  {pet.vaccinations.length} vaccination(s)
                 </Text>
               </View>
 
@@ -1008,87 +1370,200 @@ export default function App() {
           ))
         )}
 
-        <Text style={styles.sectionTitle}>Explore Sisu</Text>
-        <Text style={styles.sectionSubtitle}>
-          More ways to care for your pets
-        </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            💉 Vaccination Reminders
+          </Text>
+        </View>
+
+        {reminders.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.emptyText}>
+              No upcoming due dates recorded. Add vaccination records
+              with next due dates to see reminders here.
+            </Text>
+          </View>
+        ) : (
+          reminders.slice(0, 8).map((item) => (
+            <Pressable
+              key={`${item.petId}-${item.id}`}
+              style={styles.reminderCard}
+              onPress={() => {
+                setSelectedPetId(item.petId);
+                setScreen('vaccinations');
+              }}
+            >
+              <View style={styles.reminderMain}>
+                <Text style={styles.reminderTitle}>
+                  {item.vaccineName}
+                </Text>
+                <Text style={styles.reminderPet}>
+                  {item.petName}
+                </Text>
+                <Text style={styles.reminderDate}>
+                  Due: {item.nextDueDate}
+                </Text>
+              </View>
+
+              <Text
+                style={[
+                  styles.reminderStatus,
+                  {
+                    color: getVaccinationStatusColor(item.status),
+                  },
+                ]}
+              >
+                {item.status}
+              </Text>
+            </Pressable>
+          ))
+        )}
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Explore Sisu</Text>
+        </View>
 
         <FeatureCard
-          emoji="🩺"
-          title="Health Records"
-          description="Keep track of veterinary visits and medical history."
+          emoji="📋"
+          title="Pet Health Records"
+          description="Keep track of visits, diagnoses, treatments, and medications."
+          onPress={() => {
+            if (pets.length === 0) {
+              Alert.alert(
+                'Add a pet first',
+                'Create a pet profile before adding health records.'
+              );
+            } else {
+              openHealthRecords(pets[0]);
+            }
+          }}
         />
 
         <FeatureCard
           emoji="💉"
-          title="Vaccinations"
-          description="Organize vaccination records and due dates."
+          title="Vaccination Tracking"
+          description="Save vaccination dates and check upcoming or overdue dates."
+          onPress={() => {
+            if (pets.length === 0) {
+              Alert.alert(
+                'Add a pet first',
+                'Create a pet profile before adding vaccinations.'
+              );
+            } else {
+              openVaccinations(pets[0]);
+            }
+          }}
         />
 
         <FeatureCard
-          emoji="🏥"
+          emoji="📍"
           title="Find a Veterinarian"
-          description="Discover veterinary care for your companions."
+          description="Discover nearby veterinary clinics."
+          onPress={() =>
+            Alert.alert(
+              'Coming next',
+              'Veterinarian discovery has not been implemented yet.'
+            )
+          }
         />
 
-        <Text style={styles.footer}>
-          Made with care for every paw. 🐾
+        <Text style={styles.footerText}>
+          Sisu · Care for every paw 🐾
         </Text>
       </ScrollView>
     );
   }
 
-  // ---------------- APP RENDER ----------------
-
   if (!petsLoaded) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <StatusBar barStyle="dark-content" />
-        <Text style={styles.logo}>sisu</Text>
-        <ActivityIndicator size="large" color="#267A60" />
-        <Text style={styles.loadingText}>Loading your pets...</Text>
+        <ActivityIndicator size="large" color="#16856B" />
+        <Text style={styles.loadingText}>Loading Sisu...</Text>
       </SafeAreaView>
     );
   }
 
+  let content;
+
+  switch (screen) {
+    case 'addPet':
+    case 'editPet':
+      content = renderPetForm();
+      break;
+
+    case 'profile':
+      content = renderProfile();
+      break;
+
+    case 'healthRecords':
+      content = renderHealthRecords();
+      break;
+
+    case 'addHealthRecord':
+    case 'editHealthRecord':
+      content = renderHealthRecordForm();
+      break;
+
+    case 'vaccinations':
+      content = renderVaccinations();
+      break;
+
+    case 'addVaccination':
+    case 'editVaccination':
+      content = renderVaccinationForm();
+      break;
+
+    case 'home':
+    default:
+      content = renderHome();
+      break;
+  }
+
   return (
-    <SafeAreaView style={styles.app}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor="#F7F8F4"
-      />
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
 
-      {screen === 'home' && renderHome()}
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => setScreen('home')}
+          style={styles.topBarBrand}
+        >
+          <Text style={styles.topBarLogo}>🐾 Sisu</Text>
+        </Pressable>
 
-      {(screen === 'addPet' || screen === 'editPet') &&
-        renderPetForm()}
+        {screen !== 'home' && (
+          <Pressable
+            onPress={() => setScreen('home')}
+            style={styles.homeLink}
+          >
+            <Text style={styles.homeLinkText}>Dashboard</Text>
+          </Pressable>
+        )}
+      </View>
 
-      {screen === 'profile' && renderProfile()}
-
-      {screen === 'healthRecords' && renderHealthRecords()}
-
-      {(screen === 'addHealthRecord' ||
-        screen === 'editHealthRecord') &&
-        renderHealthForm()}
+      <View style={styles.screenContainer}>{content}</View>
     </SafeAreaView>
   );
 }
 
-// ---------------- REUSABLE COMPONENTS ----------------
-
 function ProfileDetail({ label, value }) {
   return (
-    <View style={styles.detailRow}>
+    <View style={styles.profileDetail}>
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>
-        {value || 'Not specified'}
+        {value === undefined || value === null || value === ''
+          ? 'Not provided'
+          : String(value)}
       </Text>
     </View>
   );
 }
 
 function RecordDetail({ label, value }) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   return (
     <View style={styles.recordDetail}>
@@ -1098,481 +1573,474 @@ function RecordDetail({ label, value }) {
   );
 }
 
-function FeatureCard({ emoji, title, description }) {
+function FeatureCard({ emoji, title, description, onPress }) {
   return (
-    <View style={styles.featureCard}>
+    <Pressable style={styles.featureCard} onPress={onPress}>
       <Text style={styles.featureEmoji}>{emoji}</Text>
-      <View style={styles.featureInfo}>
+      <View style={styles.featureContent}>
         <Text style={styles.featureTitle}>{title}</Text>
         <Text style={styles.featureDescription}>{description}</Text>
-        <Text style={styles.comingSoon}>COMING SOON</Text>
       </View>
-    </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
   );
 }
 
-// ---------------- STYLES ----------------
-
 const styles = StyleSheet.create({
-  app: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#F7F8F4',
+    backgroundColor: '#F5F8F7',
   },
   loadingScreen: {
     flex: 1,
-    backgroundColor: '#F7F8F4',
+    backgroundColor: '#F5F8F7',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
   },
   loadingText: {
-    color: '#66736B',
-    fontSize: 14,
+    marginTop: 12,
+    color: '#475467',
+    fontSize: 15,
   },
-  screen: {
+  topBar: {
+    minHeight: 58,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E4E7EC',
+  },
+  topBarBrand: {
+    paddingVertical: 8,
+  },
+  topBarLogo: {
+    color: '#126B58',
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  homeLink: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#E8F5F0',
+  },
+  homeLinkText: {
+    color: '#126B58',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  screenContainer: {
     flex: 1,
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 40,
+  scrollContent: {
     width: '100%',
     maxWidth: 760,
     alignSelf: 'center',
+    padding: 18,
+    paddingBottom: 36,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  logo: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#267A60',
-    letterSpacing: -1.5,
-  },
-  tagline: {
-    color: '#66736B',
-    fontSize: 13,
-    marginTop: -2,
-  },
-  logoIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: '#E0EFE6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoEmoji: {
-    fontSize: 24,
-  },
-  welcomeCard: {
-    backgroundColor: '#267A60',
-    borderRadius: 24,
+  hero: {
+    backgroundColor: '#E1F3EB',
     padding: 24,
-    marginBottom: 30,
+    borderRadius: 20,
+    marginBottom: 18,
   },
-  welcomeSmall: {
-    color: '#D5F0E1',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  welcomeHeading: {
-    color: '#FFFFFF',
-    fontSize: 30,
+  brandName: {
+    fontSize: 16,
     fontWeight: '800',
-    lineHeight: 36,
-    marginBottom: 12,
+    color: '#126B58',
+    marginBottom: 14,
   },
-  welcomeDescription: {
-    color: '#E0F0E7',
+  heroTitle: {
+    fontSize: 29,
+    lineHeight: 36,
+    fontWeight: '800',
+    color: '#153E35',
+    marginBottom: 10,
+  },
+  heroSubtitle: {
+    color: '#47645D',
+    fontSize: 15,
+    lineHeight: 23,
+    marginBottom: 18,
+  },
+  pageHeader: {
+    marginBottom: 20,
+    marginTop: 6,
+  },
+  pageTitle: {
+    fontSize: 25,
+    fontWeight: '800',
+    color: '#153E35',
+    marginBottom: 6,
+  },
+  pageSubtitle: {
     fontSize: 14,
     lineHeight: 21,
+    color: '#667085',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 26,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 17,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7EEEA',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#126B58',
+  },
+  statLabel: {
+    marginTop: 5,
+    fontSize: 11,
+    textAlign: 'center',
+    color: '#667085',
   },
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 21,
+    color: '#153E35',
+    fontSize: 18,
     fontWeight: '800',
-    color: '#20372C',
-    marginBottom: 4,
+    marginBottom: 12,
   },
-  sectionSubtitle: {
-    color: '#78837C',
-    fontSize: 13,
-    marginBottom: 14,
+  sectionHint: {
+    fontSize: 12,
+    color: '#667085',
   },
-  addButton: {
-    backgroundColor: '#267A60',
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-    borderRadius: 12,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E7EEEA',
   },
-  addButtonText: {
+  button: {
+    minHeight: 47,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#16856B',
+    marginTop: 10,
+  },
+  buttonText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  secondaryButton: {
+    backgroundColor: '#E8F5F0',
+    borderWidth: 1,
+    borderColor: '#C5E5D8',
+  },
+  secondaryButtonText: {
+    color: '#126B58',
+  },
+  dangerButton: {
+    backgroundColor: '#B42318',
+  },
+  inputGroup: {
+    marginBottom: 15,
+  },
+  inputLabel: {
     fontSize: 13,
     fontWeight: '700',
+    color: '#344054',
+    marginBottom: 7,
+  },
+  input: {
+    minHeight: 47,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    color: '#101828',
+    fontSize: 14,
+  },
+  multilineInput: {
+    minHeight: 100,
+    paddingTop: 12,
+  },
+  helperText: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: '#667085',
+    marginBottom: 14,
   },
   petCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 15,
+    borderRadius: 15,
+    padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E9EDE8',
-  },
-  petIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 17,
-    backgroundColor: '#EAF3EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
+    borderColor: '#E7EEEA',
   },
   petCardEmoji: {
-    fontSize: 29,
+    width: 54,
+    height: 54,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F5F0',
+    marginRight: 13,
   },
-  petInfo: {
+  petEmoji: {
+    fontSize: 28,
+  },
+  petCardContent: {
     flex: 1,
   },
-  petName: {
+  petCardName: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#20372C',
-    marginBottom: 3,
-  },
-  petDescription: {
-    color: '#64736A',
-    fontSize: 13,
+    color: '#153E35',
     marginBottom: 4,
   },
-  petAge: {
-    color: '#89938D',
-    fontSize: 12,
+  petCardSubtitle: {
+    color: '#667085',
+    fontSize: 13,
+    marginBottom: 5,
   },
-  recordCount: {
-    color: '#267A60',
+  petCardMeta: {
+    color: '#667085',
     fontSize: 11,
-    fontWeight: '700',
-    marginTop: 5,
   },
   chevron: {
     fontSize: 28,
-    color: '#8B9A90',
+    color: '#98A2B3',
     marginLeft: 8,
   },
-  emptyCard: {
+  profileHero: {
     alignItems: 'center',
+    padding: 25,
+    marginBottom: 16,
+    backgroundColor: '#E1F3EB',
+    borderRadius: 18,
+  },
+  petEmojiLarge: {
+    fontSize: 65,
+    marginBottom: 8,
+  },
+  profilePetName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#153E35',
+  },
+  profilePetSubtitle: {
+    fontSize: 14,
+    color: '#47645D',
+    marginTop: 5,
+  },
+  profileDetail: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F2F1',
+  },
+  detailLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: '#667085',
+  },
+  detailValue: {
+    flex: 1,
+    fontSize: 13,
+    color: '#344054',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#475467',
+    marginBottom: 8,
+  },
+  recordCard: {
+    padding: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    marginVertical: 18,
+    borderRadius: 15,
+    marginBottom: 13,
     borderWidth: 1,
-    borderColor: '#E9EDE8',
+    borderColor: '#E7EEEA',
+  },
+  vaccinationCard: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    marginBottom: 13,
+    borderWidth: 1,
+    borderColor: '#D6EAE1',
+  },
+  recordHeader: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  recordTitle: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+    color: '#153E35',
+  },
+  recordDate: {
+    fontSize: 12,
+    color: '#667085',
+  },
+  recordDetail: {
+    paddingVertical: 6,
+  },
+  recordDetailLabel: {
+    fontSize: 11,
+    color: '#667085',
+    marginBottom: 3,
+  },
+  recordDetailValue: {
+    fontSize: 13,
+    color: '#344054',
+    lineHeight: 19,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  buttonHalf: {
+    flex: 1,
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  reminderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#E7EEEA',
+    marginBottom: 10,
+  },
+  reminderMain: {
+    flex: 1,
+  },
+  reminderTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#153E35',
+    marginBottom: 4,
+  },
+  reminderPet: {
+    fontSize: 12,
+    color: '#667085',
+    marginBottom: 4,
+  },
+  reminderDate: {
+    fontSize: 12,
+    color: '#475467',
+  },
+  reminderStatus: {
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 18,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E7EEEA',
   },
   emptyEmoji: {
     fontSize: 38,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   emptyTitle: {
-    color: '#20372C',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
-    marginBottom: 8,
+    color: '#153E35',
+    textAlign: 'center',
+    marginBottom: 7,
   },
-  emptyDescription: {
-    color: '#78837C',
+  emptyText: {
     fontSize: 13,
     lineHeight: 20,
+    color: '#667085',
     textAlign: 'center',
     marginBottom: 8,
   },
   featureCard: {
     flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
     backgroundColor: '#FFFFFF',
-    padding: 17,
-    borderRadius: 17,
-    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E9EDE8',
+    borderColor: '#E7EEEA',
+    borderRadius: 15,
+    marginBottom: 11,
   },
   featureEmoji: {
-    fontSize: 27,
-    marginRight: 14,
+    fontSize: 28,
+    marginRight: 13,
   },
-  featureInfo: {
+  featureContent: {
     flex: 1,
   },
   featureTitle: {
-    color: '#20372C',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
+    color: '#153E35',
     marginBottom: 5,
   },
   featureDescription: {
-    color: '#78837C',
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 8,
-  },
-  comingSoon: {
-    color: '#267A60',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  eyebrow: {
-    color: '#267A60',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    marginBottom: 8,
-  },
-  heading: {
-    fontSize: 28,
-    color: '#20372C',
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#78837C',
-    fontSize: 14,
-    lineHeight: 21,
-    marginBottom: 24,
-  },
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E9EDE8',
-    marginTop: 14,
-  },
-  label: {
-    color: '#34483B',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#F8FAF7',
-    borderWidth: 1,
-    borderColor: '#DFE7DF',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: '#20372C',
-    marginBottom: 18,
-  },
-  multilineInput: {
-    minHeight: 90,
-    paddingTop: 12,
-  },
-  helper: {
-    color: '#78837C',
     fontSize: 12,
     lineHeight: 18,
-    marginBottom: 16,
+    color: '#667085',
   },
-  choiceRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  choiceButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#DFE7DF',
-    backgroundColor: '#F8FAF7',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  choiceSelected: {
-    backgroundColor: '#267A60',
-    borderColor: '#267A60',
-  },
-  choiceText: {
-    color: '#34483B',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  choiceTextSelected: {
-    color: '#FFFFFF',
-  },
-  button: {
-    backgroundColor: '#267A60',
-    borderRadius: 12,
-    paddingVertical: 15,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  secondaryButton: {
-    backgroundColor: '#EAF1EB',
-  },
-  secondaryButtonText: {
-    color: '#267A60',
-  },
-  profileCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 22,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#E9EDE8',
-    marginTop: 14,
-  },
-  petAvatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 30,
-    backgroundColor: '#EAF3EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: 14,
-  },
-  avatarEmoji: {
-    fontSize: 48,
-  },
-  profileName: {
-    textAlign: 'center',
-    fontSize: 25,
-    fontWeight: '800',
-    color: '#20372C',
-  },
-  profileSpecies: {
-    textAlign: 'center',
-    color: '#78837C',
-    fontSize: 14,
-    marginTop: 5,
-    marginBottom: 16,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E8EDE7',
-    marginBottom: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F2EE',
-    gap: 16,
-  },
-  detailLabel: {
-    color: '#78837C',
-    fontSize: 13,
-  },
-  detailValue: {
-    color: '#20372C',
-    fontSize: 13,
-    fontWeight: '700',
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  recordCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E9EDE8',
-    marginBottom: 14,
-  },
-  recordHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginBottom: 12,
-  },
-  recordDateBadge: {
-    backgroundColor: '#EAF3EC',
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  recordDateText: {
-    color: '#267A60',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  recordTitle: {
-    color: '#20372C',
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 10,
-  },
-  recordDetail: {
-    paddingVertical: 9,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F2EE',
-  },
-  recordDetailLabel: {
-    color: '#78837C',
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  recordDetailValue: {
-    color: '#34483B',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  recordActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  smallButton: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#EAF1EB',
-    paddingVertical: 11,
-    borderRadius: 10,
-  },
-  smallButtonText: {
-    color: '#267A60',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  deleteButton: {
-    backgroundColor: '#FCEBE8',
-  },
-  deleteButtonText: {
-    color: '#B42318',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  footer: {
-    textAlign: 'center',
-    color: '#89938D',
-    fontSize: 12,
+  footerText: {
     marginTop: 22,
-    marginBottom: 12,
+    marginBottom: 10,
+    textAlign: 'center',
+    color: '#98A2B3',
+    fontSize: 12,
   },
 });
