@@ -9,7 +9,7 @@ import {
   StatusBar,
   Pressable,
   Alert,
-  ActivityIndicator,
+
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
@@ -20,6 +20,7 @@ import ReminderCard from './src/components/reminders/ReminderCard';
 import AppButton from './src/components/common/AppButton';
 import AppInput from './src/components/common/AppInput';
 import AppHeader from './src/components/common/AppHeader';
+import LoadingIndicator from './src/components/common/LoadingIndicator';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -1402,15 +1403,14 @@ function renderHeader(title, subtitle = '') {
     );
   }
 
-  if (!petsLoaded) {
-    return (
-      <SafeAreaView style={styles.loadingScreen}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color="#16856B" />
-        <Text style={styles.loadingText}>Loading Sisu...</Text>
-      </SafeAreaView>
-    );
-  }
+ if (!petsLoaded) {
+  return (
+    <SafeAreaView style={styles.loadingScreen}>
+      <StatusBar barStyle="dark-content" />
+      <LoadingIndicator />
+    </SafeAreaView>
+  );
+}
 
   let content;
 
@@ -1485,11 +1485,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingText: {
-    marginTop: 12,
-    color: '#475467',
-    fontSize: 15,
-  },
+
   topBar: {
     minHeight: 58,
     paddingHorizontal: 20,
