@@ -4,12 +4,10 @@ import {
   ScrollView,
   View,
   Text,
-  TextInput,
   StyleSheet,
   StatusBar,
   Pressable,
   Alert,
-
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
@@ -69,6 +67,38 @@ const EMPTY_VACCINATION_FORM = {
   veterinarian: '',
   notes: '',
 };
+
+// Screens where the bottom navigation is hidden (add / edit forms)
+const FORM_SCREENS = [
+  'addPet',
+  'editPet',
+  'addHealthRecord',
+  'editHealthRecord',
+  'addVaccination',
+  'editVaccination',
+];
+
+const NAV_ITEMS = [
+  { key: 'home', label: 'Home', emoji: '🏠' },
+  { key: 'pets', label: 'My Pets', emoji: '🐾' },
+  { key: 'reminders', label: 'Reminders', emoji: '🔔' },
+  { key: 'settings', label: 'Settings', emoji: '⚙️' },
+];
+
+// Which bottom tab should be highlighted for a given screen
+function getActiveTab(screen) {
+  switch (screen) {
+    case 'home':
+      return 'home';
+    case 'reminders':
+      return 'reminders';
+    case 'settings':
+      return 'settings';
+    default:
+      // pets, profile, healthRecords, vaccinations, etc.
+      return 'pets';
+  }
+}
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -499,7 +529,9 @@ export default function App() {
       notes: vaccination.notes || '',
     });
     setScreen('editVaccination');
-  }  function saveVaccination() {
+  }
+
+  function saveVaccination() {
     if (!selectedPet) {
       Alert.alert('Error', 'Please select a pet first.');
       return;
@@ -573,10 +605,7 @@ export default function App() {
 
         return {
           ...pet,
-          vaccinations: [
-            ...currentVaccinations,
-            vaccination,
-          ],
+          vaccinations: [...currentVaccinations, vaccination],
         };
       })
     );
@@ -646,77 +675,119 @@ export default function App() {
     });
   }
 
+  // ---- Settings actions ----
+
+  function restoreSamplePet() {
+    Alert.alert(
+      'Restore sample data',
+      'This replaces all your current pets and records with the sample pet. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          style: 'destructive',
+          onPress: () => {
+            setPets(INITIAL_PETS.map(normalizePet));
+            setSelectedPetId(null);
+            setScreen('home');
+          },
+        },
+      ]
+    );
+  }
+
+  function clearAllData() {
+    Alert.alert(
+      'Clear all data',
+      'This permanently deletes every pet, medical record, and vaccination saved on this device.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear everything',
+          style: 'destructive',
+          onPress: () => {
+            setPets([]);
+            setSelectedPetId(null);
+            setSelectedRecordId(null);
+            setSelectedVaccinationId(null);
+            setScreen('home');
+          },
+        },
+      ]
+    );
+  }
+
   function renderButton(
-  label,
-  onPress,
-  variant = 'primary',
-  extraStyle = {}
-) {
-  return (
-    <AppButton
-      label={label}
-      onPress={onPress}
-      variant={variant}
-      style={extraStyle}
-    />
-  );
-}
+    label,
+    onPress,
+    variant = 'primary',
+    extraStyle = {}
+  ) {
+    return (
+      <AppButton
+        label={label}
+        onPress={onPress}
+        variant={variant}
+        style={extraStyle}
+      />
+    );
+  }
 
- function renderPetInput(
-  label,
-  field,
-  placeholder,
-  keyboardType = 'default'
-) {
-  return (
-    <AppInput
-      key={field}
-      label={label}
-      value={petForm[field]}
-      onChangeText={(value) => updatePetForm(field, value)}
-      placeholder={placeholder}
-      keyboardType={keyboardType}
-    />
-  );
-}
+  function renderPetInput(
+    label,
+    field,
+    placeholder,
+    keyboardType = 'default'
+  ) {
+    return (
+      <AppInput
+        key={field}
+        label={label}
+        value={petForm[field]}
+        onChangeText={(value) => updatePetForm(field, value)}
+        placeholder={placeholder}
+        keyboardType={keyboardType}
+      />
+    );
+  }
 
-function renderHealthInput(
-  label,
-  field,
-  placeholder,
-  multiline = false
-) {
-  return (
-    <AppInput
-      key={field}
-      label={label}
-      value={healthForm[field]}
-      onChangeText={(value) => updateHealthForm(field, value)}
-      placeholder={placeholder}
-      multiline={multiline}
-    />
-  );
-}
+  function renderHealthInput(
+    label,
+    field,
+    placeholder,
+    multiline = false
+  ) {
+    return (
+      <AppInput
+        key={field}
+        label={label}
+        value={healthForm[field]}
+        onChangeText={(value) => updateHealthForm(field, value)}
+        placeholder={placeholder}
+        multiline={multiline}
+      />
+    );
+  }
 
- function renderVaccinationInput(
-  label,
-  field,
-  placeholder,
-  multiline = false
-) {
-  return (
-    <AppInput
-      key={field}
-      label={label}
-      value={vaccinationForm[field]}
-      onChangeText={(value) =>
-        updateVaccinationForm(field, value)
-      }
-      placeholder={placeholder}
-      multiline={multiline}
-    />
-  );
-}
+  function renderVaccinationInput(
+    label,
+    field,
+    placeholder,
+    multiline = false
+  ) {
+    return (
+      <AppInput
+        key={field}
+        label={label}
+        value={vaccinationForm[field]}
+        onChangeText={(value) =>
+          updateVaccinationForm(field, value)
+        }
+        placeholder={placeholder}
+        multiline={multiline}
+      />
+    );
+  }
 
   function petEmoji(species) {
     const value = (species || '').toLowerCase();
@@ -731,15 +802,9 @@ function renderHealthInput(
     return '🐾';
   }
 
- 
-function renderHeader(title, subtitle = '') {
-  return (
-    <AppHeader
-      title={title}
-      subtitle={subtitle}
-    />
-  );
-}
+  function renderHeader(title, subtitle = '') {
+    return <AppHeader title={title} subtitle={subtitle} />;
+  }
 
   function renderPetForm() {
     const editing = screen === 'editPet';
@@ -773,11 +838,7 @@ function renderHeader(title, subtitle = '') {
             'YYYY-MM-DD'
           )}
           {renderPetInput('Sex', 'sex', 'Male, Female, Unknown')}
-          {renderPetInput(
-            'Weight',
-            'weight',
-            'e.g. 12 kg'
-          )}
+          {renderPetInput('Weight', 'weight', 'e.g. 12 kg')}
           {renderPetInput(
             'Color / markings',
             'color',
@@ -839,15 +900,17 @@ function renderHeader(title, subtitle = '') {
           />
           <ProfileDetail label="Sex" value={selectedPet.sex} />
           <ProfileDetail label="Weight" value={selectedPet.weight} />
-          <ProfileDetail label="Color / markings" value={selectedPet.color} />
+          <ProfileDetail
+            label="Color / markings"
+            value={selectedPet.color}
+          />
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Health management</Text>
 
-          {renderButton(
-            '📋 View Medical History',
-            () => openHealthRecords(selectedPet)
+          {renderButton('📋 View Medical History', () =>
+            openHealthRecords(selectedPet)
           )}
 
           {renderButton(
@@ -879,8 +942,8 @@ function renderHeader(title, subtitle = '') {
           'danger'
         )}
         {renderButton(
-          'Back to Dashboard',
-          () => setScreen('home'),
+          'Back to My Pets',
+          () => setScreen('pets'),
           'secondary'
         )}
       </ScrollView>
@@ -908,10 +971,7 @@ function renderHeader(title, subtitle = '') {
           'Appointments, diagnoses, treatments, and medications.'
         )}
 
-        {renderButton(
-          '+ Add Health Record',
-          openAddHealthRecord
-        )}
+        {renderButton('+ Add Health Record', openAddHealthRecord)}
 
         {records.length === 0 ? (
           <View style={styles.emptyState}>
@@ -930,9 +990,7 @@ function renderHeader(title, subtitle = '') {
                 <Text style={styles.recordTitle}>
                   {record.reason}
                 </Text>
-                <Text style={styles.recordDate}>
-                  {record.date}
-                </Text>
+                <Text style={styles.recordDate}>{record.date}</Text>
               </View>
 
               <RecordDetail
@@ -981,7 +1039,8 @@ function renderHeader(title, subtitle = '') {
       </ScrollView>
     );
   }
-    function renderHealthRecordForm() {
+
+  function renderHealthRecordForm() {
     const editing = screen === 'editHealthRecord';
 
     return (
@@ -1078,10 +1137,7 @@ function renderHeader(title, subtitle = '') {
           </Text>
         </View>
 
-        {renderButton(
-          '+ Add Vaccination',
-          openAddVaccination
-        )}
+        {renderButton('+ Add Vaccination', openAddVaccination)}
 
         {vaccinations.length === 0 ? (
           <View style={styles.emptyState}>
@@ -1095,23 +1151,22 @@ function renderHeader(title, subtitle = '') {
             </Text>
           </View>
         ) : (
-          
-vaccinations.map((vaccination) => {
-  const status = getVaccinationStatus(
-    vaccination.nextDueDate
-  );
+          vaccinations.map((vaccination) => {
+            const status = getVaccinationStatus(
+              vaccination.nextDueDate
+            );
 
-  return (
-    <VaccinationCard
-      key={vaccination.id}
-      vaccination={vaccination}
-      status={status}
-      statusColor={getVaccinationStatusColor(status)}
-      onEdit={() => openEditVaccination(vaccination)}
-      onDelete={() => deleteVaccination(vaccination.id)}
-    />
-  );
-})
+            return (
+              <VaccinationCard
+                key={vaccination.id}
+                vaccination={vaccination}
+                status={status}
+                statusColor={getVaccinationStatusColor(status)}
+                onEdit={() => openEditVaccination(vaccination)}
+                onDelete={() => deleteVaccination(vaccination.id)}
+              />
+            );
+          })
         )}
 
         {renderButton(
@@ -1194,8 +1249,7 @@ vaccinations.map((vaccination) => {
     const reminders = getAllVaccinationReminders();
     const urgentReminders = reminders.filter(
       (item) =>
-        item.status === 'Overdue' ||
-        item.status === 'Due today'
+        item.status === 'Overdue' || item.status === 'Due today'
     );
 
     return (
@@ -1348,14 +1402,207 @@ vaccinations.map((vaccination) => {
     );
   }
 
- if (!petsLoaded) {
-  return (
-    <SafeAreaView style={styles.loadingScreen}>
-      <StatusBar barStyle="dark-content" />
-      <LoadingIndicator />
-    </SafeAreaView>
-  );
-}
+  // ---- New screens ----
+
+  function renderMyPets() {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          'My Pets',
+          'Tap a pet to see their profile, records, and vaccinations.'
+        )}
+
+        {renderButton('+ Add a Pet', openAddPet)}
+
+        {pets.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🐾</Text>
+            <Text style={styles.emptyTitle}>No pets yet</Text>
+            <Text style={styles.emptyText}>
+              Add your first pet to begin keeping track of their care.
+            </Text>
+          </View>
+        ) : (
+          pets.map((pet) => (
+            <PetCard
+              key={pet.id}
+              pet={pet}
+              emoji={petEmoji(pet.species)}
+              onPress={() => openProfile(pet)}
+            />
+          ))
+        )}
+      </ScrollView>
+    );
+  }
+
+  function renderReminderGroup(title, items) {
+    if (items.length === 0) {
+      return null;
+    }
+
+    return (
+      <View key={title}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.sectionHint}>{items.length}</Text>
+        </View>
+
+        {items.map((item) => (
+          <ReminderCard
+            key={`${item.petId}-${item.id}`}
+            item={item}
+            statusColor={getVaccinationStatusColor(item.status)}
+            onPress={() => {
+              setSelectedPetId(item.petId);
+              setScreen('vaccinations');
+            }}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  function renderReminders() {
+    const reminders = getAllVaccinationReminders();
+    const overdue = reminders.filter((i) => i.status === 'Overdue');
+    const dueToday = reminders.filter((i) => i.status === 'Due today');
+    const upcoming = reminders.filter((i) => i.status === 'Upcoming');
+
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          'Reminders',
+          'Vaccination due dates across all your pets.'
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.helperText}>
+            Sisu checks the next due dates you saved and shows their
+            status here. These are in-app reminders, not push
+            notifications.
+          </Text>
+        </View>
+
+        {reminders.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🔔</Text>
+            <Text style={styles.emptyTitle}>Nothing due</Text>
+            <Text style={styles.emptyText}>
+              Add vaccination records with a next due date to see
+              reminders here.
+            </Text>
+          </View>
+        ) : (
+          <>
+            {renderReminderGroup('Overdue', overdue)}
+            {renderReminderGroup('Due today', dueToday)}
+            {renderReminderGroup('Upcoming', upcoming)}
+          </>
+        )}
+      </ScrollView>
+    );
+  }
+
+  function renderSettings() {
+    const totalRecords = pets.reduce(
+      (total, pet) => total + pet.healthRecords.length,
+      0
+    );
+    const totalVaccinations = pets.reduce(
+      (total, pet) => total + pet.vaccinations.length,
+      0
+    );
+
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader('Settings', 'Manage your Sisu data and app info.')}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Your data</Text>
+          <Text style={styles.summaryText}>Pets: {pets.length}</Text>
+          <Text style={styles.summaryText}>
+            Medical records: {totalRecords}
+          </Text>
+          <Text style={styles.summaryText}>
+            Vaccinations: {totalVaccinations}
+          </Text>
+          <Text style={styles.helperText}>
+            Everything is stored locally on this device.
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Data management</Text>
+          {renderButton(
+            'Restore sample pet',
+            restoreSamplePet,
+            'secondary'
+          )}
+          {renderButton('Clear all data', clearAllData, 'danger')}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>About Sisu</Text>
+          <Text style={styles.summaryText}>
+            Sisu helps you keep your pets’ profiles, medical history,
+            and vaccination dates in one place.
+          </Text>
+          <Text style={styles.helperText}>Version 1.0.0</Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderBottomNav() {
+    const activeTab = getActiveTab(screen);
+
+    return (
+      <View style={styles.bottomNav}>
+        {NAV_ITEMS.map((item) => {
+          const active = item.key === activeTab;
+
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => setScreen(item.key)}
+              style={styles.navItem}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              accessibilityState={{ selected: active }}
+            >
+              <Text
+                style={[
+                  styles.navEmoji,
+                  !active && styles.navEmojiInactive,
+                ]}
+              >
+                {item.emoji}
+              </Text>
+              <Text
+                style={[
+                  styles.navLabel,
+                  active && styles.navLabelActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+              {active && <View style={styles.navIndicator} />}
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
+  if (!petsLoaded) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <StatusBar barStyle="dark-content" />
+        <LoadingIndicator />
+      </SafeAreaView>
+    );
+  }
 
   let content;
 
@@ -1387,11 +1634,25 @@ vaccinations.map((vaccination) => {
       content = renderVaccinationForm();
       break;
 
+    case 'pets':
+      content = renderMyPets();
+      break;
+
+    case 'reminders':
+      content = renderReminders();
+      break;
+
+    case 'settings':
+      content = renderSettings();
+      break;
+
     case 'home':
     default:
       content = renderHome();
       break;
   }
+
+  const showBottomNav = !FORM_SCREENS.includes(screen);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1416,9 +1677,12 @@ vaccinations.map((vaccination) => {
       </View>
 
       <View style={styles.screenContainer}>{content}</View>
+
+      {showBottomNav && renderBottomNav()}
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -1470,6 +1734,46 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 36,
   },
+
+  // Bottom navigation
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E4E7EC',
+    paddingBottom: 6,
+    paddingTop: 6,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  navEmoji: {
+    fontSize: 22,
+  },
+  navEmojiInactive: {
+    opacity: 0.55,
+  },
+  navLabel: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#667085',
+  },
+  navLabelActive: {
+    color: '#126B58',
+    fontWeight: '800',
+  },
+  navIndicator: {
+    marginTop: 4,
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#126B58',
+  },
+
   hero: {
     backgroundColor: '#E1F3EB',
     padding: 24,
@@ -1495,7 +1799,7 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginBottom: 18,
   },
- 
+
   statsRow: {
     flexDirection: 'row',
     gap: 10,
