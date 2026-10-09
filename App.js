@@ -17,6 +17,7 @@ import ProfileDetail from './src/components/pets/ProfileDetail';
 import RecordDetail from './src/components/health/RecordDetail';
 import PetCard from './src/components/pets/PetCard';
 import ReminderCard from './src/components/reminders/ReminderCard';
+import AppButton from './src/components/common/AppButton';
 
 const STORAGE_KEY = 'sisu_pets';
 
@@ -642,33 +643,20 @@ export default function App() {
   }
 
   function renderButton(
-    label,
-    onPress,
-    variant = 'primary',
-    extraStyle = {}
-  ) {
-    return (
-      <Pressable
-        onPress={onPress}
-        style={[
-          styles.button,
-          variant === 'secondary' && styles.secondaryButton,
-          variant === 'danger' && styles.dangerButton,
-          extraStyle,
-        ]}
-      >
-        <Text
-          style={[
-            styles.buttonText,
-            variant === 'secondary' &&
-              styles.secondaryButtonText,
-          ]}
-        >
-          {label}
-        </Text>
-      </Pressable>
-    );
-  }
+  label,
+  onPress,
+  variant = 'primary',
+  extraStyle = {}
+) {
+  return (
+    <AppButton
+      label={label}
+      onPress={onPress}
+      variant={variant}
+      style={extraStyle}
+    />
+  );
+}
 
   function renderPetInput(
     label,
@@ -1651,33 +1639,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E7EEEA',
   },
-  button: {
-    minHeight: 47,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#16856B',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  secondaryButton: {
-    backgroundColor: '#E8F5F0',
-    borderWidth: 1,
-    borderColor: '#C5E5D8',
-  },
-  secondaryButtonText: {
-    color: '#126B58',
-  },
-  dangerButton: {
-    backgroundColor: '#B42318',
-  },
+
   inputGroup: {
     marginBottom: 15,
   },
