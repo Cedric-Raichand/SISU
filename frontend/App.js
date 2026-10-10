@@ -8,6 +8,7 @@ import {
   StatusBar,
   Pressable,
   Alert,
+  Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
@@ -20,6 +21,7 @@ import AppInput from './src/components/common/AppInput';
 import AppHeader from './src/components/common/AppHeader';
 import LoadingIndicator from './src/components/common/LoadingIndicator';
 import VaccinationCard from './src/components/health/VaccinationCard';
+import * as Location from 'expo-location';
 import {
   scheduleVaccinationReminder,
   cancelVaccinationReminder,
@@ -206,6 +208,10 @@ function normalizePet(pet) {
 
 export default function App() {
   const [screen, setScreen] = useState('home');
+  const [clinics, setClinics] = useState([]);
+const [clinicLoading, setClinicLoading] = useState(false);
+const [clinicError, setClinicError] = useState('');
+const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   const [pets, setPets] = useState([]);
   const [petsLoaded, setPetsLoaded] = useState(false);
 
@@ -1505,40 +1511,279 @@ export default function App() {
       </ScrollView>
     );
   }
+async function searchNearbyClinics() {
+  setClinicLoading(true);
+  setClinicError('');
+  setClinics([]);
 
+  try {
+    const permission =
+      await Location.requestForegroundPermissionsAsync();
+
+    if (permission.status !== 'granted') {
+      setClinicError(
+        'Location permission was not granted. Allow location access in your device settings and try again.'
+      );
+      return;
+    }
+
+    const position = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    const { latitude, longitude } = position.coords;
+
+    setClinicSearchLocation({ latitude, longitude });
+
+    const query = `
+      [out:json][timeout:25];
+      (
+        nwr["amenity"="veterinary"](around:15000,${latitude},${longitude});
+        nwr["healthcare"="veterinary"](around:15000,${latitude},${longitude});
+      );
+      out center tags;
+    `;
+
+    const response = await fetch(
+      'https://overpass-api.de/api/interpreter',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `data=${encodeURIComponent(query)}`,
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('The clinic search service is temporarily unavailable.');
+    }
+
+    const data = await response.json();
+
+    const results = (data.elements || [])
+      .map((item) => {
+        const tags = item.tags || {};
+        const latitudeOfClinic = item.lat ?? item.center?.lat;
+        const longitudeOfClinic = item.lon ?? item.center?.lon;
+
+        if (
+          latitudeOfClinic == null ||
+          longitudeOfClinic == null
+        ) {
+          return null;
+        }
+
+        const name = tags.name || tags['name:en'];
+
+        if (!name) {
+          return null;
+        }
+
+        const address = [
+          tags['addr:housenumber'],
+          tags['addr:street'],
+          tags['addr:suburb'],
+          tags['addr:city'],
+        ]
+          .filter(Boolean)
+          .join(', ');
+
+        const distanceInKm = getClinicDistance(
+          latitude,
+          longitude,
+          latitudeOfClinic,
+          longitudeOfClinic
+        );
+
+        return {
+          id: `${item.type}-${item.id}`,
+          name,
+          latitude: latitudeOfClinic,
+          longitude: longitudeOfClinic,
+          address,
+          phone: tags.phone || tags['contact:phone'] || '',
+          website: tags.website || tags['contact:website'] || '',
+          distanceInKm,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    setClinics(results);
+
+    if (results.length === 0) {
+      setClinicError(
+        'No named veterinary clinics were found within 15 km. OpenStreetMap may have limited clinic data for your area.'
+      );
+    }
+  } catch (error) {
+    console.error('Clinic search failed:', error);
+
+    setClinicError(
+      'We could not load clinics right now. Check your internet connection and try again.'
+    );
+  } finally {
+    setClinicLoading(false);
+  }
+}
+
+function getClinicDistance(lat1, lon1, lat2, lon2) {
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+
+  const latitudeDifference = toRadians(lat2 - lat1);
+  const longitudeDifference = toRadians(lon2 - lon1);
+
+  const calculation =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return (
+    earthRadiusKm *
+    2 *
+    Math.atan2(
+      Math.sqrt(calculation),
+      Math.sqrt(1 - calculation)
+    )
+  );
+}
+
+async function openClinicDirections(clinic) {
+  const url =
+    `https://www.google.com/maps/dir/?api=1` +
+    `&destination=${clinic.latitude},${clinic.longitude}`;
+
+  try {
+    await Linking.openURL(url);
+  } catch (error) {
+    Alert.alert(
+      'Could not open directions',
+      'Please try opening Google Maps on your device.'
+    );
+  }
+}
   function renderVeterinarians() {
-    return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {renderHeader(
-          'Find a Veterinarian',
-          'Find veterinary care for your pets.'
+  return (
+    <ScrollView contentContainerStyle={styles.scrollContent}>
+      {renderHeader(
+        'Find a Veterinarian',
+        'Discover veterinary care near you.'
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>
+          Nearby veterinary clinics
+        </Text>
+
+        <Text style={styles.summaryText}>
+          Find veterinary clinics within 15 km of your current
+          location. Results come from OpenStreetMap.
+        </Text>
+
+        {renderButton(
+          clinicLoading
+            ? 'Searching for clinics...'
+            : '📍 Find Clinics Near Me',
+          searchNearbyClinics,
+          'primary'
         )}
 
-        <View style={styles.card}>
+        {clinicSearchLocation && (
+          <Text style={styles.helperText}>
+            Location: {clinicSearchLocation.latitude.toFixed(4)},{' '}
+            {clinicSearchLocation.longitude.toFixed(4)}
+          </Text>
+        )}
+
+        {clinicLoading && (
+          <View style={styles.emptyState}>
+            <LoadingIndicator />
+            <Text style={styles.emptyText}>
+              Searching for nearby veterinary clinics...
+            </Text>
+          </View>
+        )}
+
+        {!!clinicError && !clinicLoading && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>{clinicError}</Text>
+
+            {renderButton(
+              'Try Again',
+              searchNearbyClinics,
+              'secondary'
+            )}
+          </View>
+        )}
+
+        {!clinicLoading &&
+          !clinicError &&
+          clinics.length > 0 && (
+            <Text style={styles.helperText}>
+              Found {clinics.length}{' '}
+              {clinics.length === 1 ? 'clinic' : 'clinics'}.
+              Distances are approximate.
+            </Text>
+          )}
+      </View>
+
+      {clinics.map((clinic) => (
+        <View key={clinic.id} style={styles.card}>
           <Text style={styles.sectionTitle}>
-            Nearby veterinary clinics
+            🏥 {clinic.name}
           </Text>
 
           <Text style={styles.summaryText}>
-            Clinic discovery is being prepared. Soon, you will be
-            able to find veterinary clinics, view their contact
-            details, and get directions.
+            Approximately {clinic.distanceInKm.toFixed(1)} km away
           </Text>
 
-          <Text style={styles.helperText}>
-            Your existing pet profiles and health records remain
-            unchanged.
-          </Text>
+          {!!clinic.address && (
+            <Text style={styles.helperText}>
+              Address: {clinic.address}
+            </Text>
+          )}
+
+          {!!clinic.phone && (
+            <Text style={styles.helperText}>
+              Phone: {clinic.phone}
+            </Text>
+          )}
+
+          {!!clinic.website && (
+            <Text
+              style={styles.helperText}
+              onPress={() => Linking.openURL(clinic.website)}
+            >
+              Website: {clinic.website}
+            </Text>
+          )}
 
           {renderButton(
-            'Back to Home',
-            () => setScreen('home'),
-            'secondary'
+            '🗺️ Get Directions',
+            () => openClinicDirections(clinic)
           )}
         </View>
-      </ScrollView>
-    );
-  }
+      ))}
+
+      <View style={styles.card}>
+        <Text style={styles.helperText}>
+          Clinic listings and contact details depend on what has
+          been recorded in OpenStreetMap. Please confirm clinic
+          availability before travelling.
+        </Text>
+
+        {renderButton(
+          'Back to Home',
+          () => setScreen('home'),
+          'secondary'
+        )}
+      </View>
+    </ScrollView>
+  );
+}
 
   // ---- New screens ----
 
