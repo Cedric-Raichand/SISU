@@ -1,4 +1,3 @@
-
 {
   "expo": {
     "name": "Sisu",
@@ -19,10 +18,16 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.cedricraichand.Sisu"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0ba8e484-b335-424b-80b2-3eee665e51ec"
+      }
     }
   }
 }

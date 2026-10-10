@@ -1493,20 +1493,49 @@ export default function App() {
         />
 
         <FeatureCard
-          emoji="📍"
+          emoji="🐾"
           title="Find a Veterinarian"
           description="Discover nearby veterinary clinics."
-          onPress={() =>
-            Alert.alert(
-              'Coming next',
-              'Veterinarian discovery has not been implemented yet.'
-            )
-          }
+          onPress={() => setScreen('veterinarians')}
         />
 
         <Text style={styles.footerText}>
           Sisu · Care for every paw 🐾
         </Text>
+      </ScrollView>
+    );
+  }
+
+  function renderVeterinarians() {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          'Find a Veterinarian',
+          'Find veterinary care for your pets.'
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>
+            Nearby veterinary clinics
+          </Text>
+
+          <Text style={styles.summaryText}>
+            Clinic discovery is being prepared. Soon, you will be
+            able to find veterinary clinics, view their contact
+            details, and get directions.
+          </Text>
+
+          <Text style={styles.helperText}>
+            Your existing pet profiles and health records remain
+            unchanged.
+          </Text>
+
+          {renderButton(
+            'Back to Home',
+            () => setScreen('home'),
+            'secondary'
+          )}
+        </View>
       </ScrollView>
     );
   }
@@ -1753,6 +1782,10 @@ export default function App() {
 
     case 'settings':
       content = renderSettings();
+      break;
+
+    case 'veterinarians':
+      content = renderVeterinarians();
       break;
 
     case 'home':
