@@ -48,7 +48,6 @@ export async function initializeVaccinationNotifications() {
 
   const result = await initializationPromise;
 
-  // If permission was denied, allow another attempt on the next call.
   if (!result) {
     initializationPromise = null;
   }
