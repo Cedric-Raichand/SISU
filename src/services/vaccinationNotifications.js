@@ -1,4 +1,3 @@
-
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
@@ -47,7 +46,14 @@ export async function initializeVaccinationNotifications() {
     })();
   }
 
-  return initializationPromise;
+  const result = await initializationPromise;
+
+  // If permission was denied, allow another attempt on the next call.
+  if (!result) {
+    initializationPromise = null;
+  }
+
+  return result;
 }
 
 export async function scheduleVaccinationReminder({
