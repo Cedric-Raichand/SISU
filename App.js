@@ -23,6 +23,9 @@ import VaccinationCard from './src/components/health/VaccinationCard';
 import {
   scheduleVaccinationReminder,
   cancelVaccinationReminder,
+  cancelPetVaccinationReminders,
+  cancelAllVaccinationReminders,
+  reconcileVaccinationReminders,
 } from './src/services/vaccinationNotifications';
 
 const STORAGE_KEY = 'sisu_pets';
@@ -236,18 +239,24 @@ export default function App() {
   async function loadPets() {
     try {
       const storedPets = await AsyncStorage.getItem(STORAGE_KEY);
+      let petsToLoad;
 
       if (storedPets) {
         const parsedPets = JSON.parse(storedPets);
 
-        if (Array.isArray(parsedPets)) {
-          setPets(parsedPets.map(normalizePet));
-        } else {
-          setPets(INITIAL_PETS.map(normalizePet));
-        }
+        petsToLoad = Array.isArray(parsedPets)
+          ? parsedPets.map(normalizePet)
+          : INITIAL_PETS.map(normalizePet);
       } else {
-        setPets(INITIAL_PETS.map(normalizePet));
+        petsToLoad = INITIAL_PETS.map(normalizePet);
       }
+
+      // Repair missing, outdated, or duplicate vaccination reminders.
+      // This does not request notification permission on app launch.
+      const synchronizedPets =
+        await reconcileVaccinationReminders(petsToLoad);
+
+      setPets(synchronizedPets);
     } catch (error) {
       console.error('Could not load pets:', error);
       Alert.alert(
@@ -390,13 +399,8 @@ export default function App() {
           onPress: async () => {
             const petToDelete = pets.find((pet) => pet.id === petId);
 
-            for (const vaccination of petToDelete?.vaccinations || []) {
-              if (vaccination.notificationId) {
-                await cancelVaccinationReminder(
-                  vaccination.notificationId
-                );
-              }
-            }
+            // Cancel every saved vaccination reminder for this pet.
+            await cancelPetVaccinationReminders(petToDelete);
 
             setPets((previous) =>
               previous.filter((pet) => pet.id !== petId)
@@ -616,26 +620,49 @@ export default function App() {
       : null;
 
     const vaccinationId = selectedVaccinationId || createId();
-    let notificationId = null;
 
-    try {
-      if (nextDueDate) {
-        notificationId = await scheduleVaccinationReminder({
+    const oldNotificationId =
+      existingVaccination?.notificationId || null;
+
+    const dueDateUnchanged =
+      Boolean(existingVaccination) &&
+      existingVaccination.nextDueDate === nextDueDate;
+
+    let newNotificationId = null;
+
+    if (nextDueDate) {
+      try {
+        newNotificationId = await scheduleVaccinationReminder({
           vaccinationId,
           petName: currentPet.name,
           vaccineName,
           nextDueDate,
         });
+      } catch (error) {
+        console.error(
+          'Could not schedule vaccination reminder:',
+          error
+        );
       }
-    } catch (error) {
-      console.error('Could not schedule vaccination reminder:', error);
     }
 
-    // Cancel the old reminder after attempting the replacement.
-    if (existingVaccination?.notificationId) {
-      await cancelVaccinationReminder(
-        existingVaccination.notificationId
-      );
+    // If scheduling fails but the due date has not changed,
+    // preserve the existing reminder identifier.
+    if (
+      !newNotificationId &&
+      dueDateUnchanged &&
+      oldNotificationId
+    ) {
+      newNotificationId = oldNotificationId;
+    }
+
+    // Cancel the previous reminder only if it is being replaced
+    // or the due date has changed.
+    if (
+      oldNotificationId &&
+      oldNotificationId !== newNotificationId
+    ) {
+      await cancelVaccinationReminder(oldNotificationId);
     }
 
     const vaccination = {
@@ -645,7 +672,7 @@ export default function App() {
       nextDueDate,
       veterinarian: vaccinationForm.veterinarian.trim(),
       notes: vaccinationForm.notes.trim(),
-      notificationId,
+      notificationId: newNotificationId,
     };
 
     setPets((previous) =>
@@ -706,8 +733,7 @@ export default function App() {
                   ? {
                       ...pet,
                       vaccinations: pet.vaccinations.filter(
-                        (vaccination) =>
-                          vaccination.id !== vaccinationId
+                        (item) => item.id !== vaccinationId
                       ),
                     }
                   : pet
@@ -763,9 +789,13 @@ export default function App() {
         {
           text: 'Restore',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            await cancelAllVaccinationReminders(pets);
+
             setPets(INITIAL_PETS.map(normalizePet));
             setSelectedPetId(null);
+            setSelectedRecordId(null);
+            setSelectedVaccinationId(null);
             setScreen('home');
           },
         },
@@ -782,7 +812,9 @@ export default function App() {
         {
           text: 'Clear everything',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            await cancelAllVaccinationReminders(pets);
+
             setPets([]);
             setSelectedPetId(null);
             setSelectedRecordId(null);

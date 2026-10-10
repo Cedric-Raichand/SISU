@@ -1,8 +1,21 @@
-
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 const ANDROID_CHANNEL_ID = 'vaccination-reminders';
+
+// Android Expo Go (SDK 53+) throws when expo-notifications is imported,
+// so only load it on web-free, non-Expo-Go environments (e.g. a
+// development build). In Expo Go the app works, but reminders are off.
+const isAndroidExpoGo =
+  Platform.OS === 'android' &&
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+const Notifications =
+  Platform.OS === 'web' || isAndroidExpoGo
+    ? null
+    : require('expo-notifications');
+
+const notificationsSupported = Boolean(Notifications);
 
 let initializationPromise = null;
 
@@ -42,7 +55,7 @@ function isFutureDueDate(nextDueDate) {
 }
 
 async function configureAndroidChannel() {
-  if (Platform.OS !== 'android') {
+  if (!notificationsSupported || Platform.OS !== 'android') {
     return;
   }
 
@@ -57,7 +70,7 @@ async function configureAndroidChannel() {
 }
 
 export async function initializeVaccinationNotifications() {
-  if (Platform.OS === 'web') {
+  if (!notificationsSupported) {
     return false;
   }
 
@@ -140,7 +153,7 @@ export async function scheduleVaccinationReminder({
   vaccineName,
   nextDueDate,
 }) {
-  if (Platform.OS === 'web') {
+  if (!notificationsSupported) {
     return null;
   }
 
@@ -173,7 +186,7 @@ export async function scheduleVaccinationReminder({
 }
 
 export async function cancelVaccinationReminder(identifier) {
-  if (Platform.OS === 'web' || !identifier) {
+  if (!notificationsSupported || !identifier) {
     return;
   }
 
@@ -190,7 +203,7 @@ export async function cancelVaccinationReminder(identifier) {
 }
 
 export async function cancelPetVaccinationReminders(pet) {
-  if (Platform.OS === 'web' || !pet) {
+  if (!notificationsSupported || !pet) {
     return;
   }
 
@@ -214,7 +227,7 @@ export async function cancelPetVaccinationReminders(pet) {
 }
 
 export async function cancelAllVaccinationReminders(pets) {
-  if (Platform.OS === 'web' || !Array.isArray(pets)) {
+  if (!notificationsSupported || !Array.isArray(pets)) {
     return;
   }
 
@@ -232,7 +245,7 @@ export async function cancelAllVaccinationReminders(pets) {
  * Returns the updated pets array, including notification identifiers.
  */
 export async function reconcileVaccinationReminders(pets) {
-  if (Platform.OS === 'web' || !Array.isArray(pets)) {
+  if (!notificationsSupported || !Array.isArray(pets)) {
     return pets;
   }
 
