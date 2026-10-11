@@ -330,6 +330,72 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       );
     }
   }
+  
+function updateAppointmentForm(field, value) {
+  setAppointmentForm((previous) => ({
+    ...previous,
+    [field]: value,
+  }));
+}
+
+async function bookAppointment() {
+  const { petId, clinicName, date, time, reason } = appointmentForm;
+
+  if (!petId || !clinicName.trim() || !date.trim() || !time.trim() || !reason.trim()) {
+    Alert.alert(
+      'Missing information',
+      'Please select a pet and enter the clinic, date, time, and reason for the appointment.'
+    );
+    return;
+  }
+
+  const selectedPet = pets.find((pet) => pet.id === petId);
+
+  if (!selectedPet) {
+    Alert.alert('Pet not found', 'Please select a valid pet.');
+    return;
+  }
+
+  const newAppointment = {
+    id: `appointment-${Date.now()}`,
+    petId: selectedPet.id,
+    petName: selectedPet.name,
+    clinicName: clinicName.trim(),
+    date: date.trim(),
+    time: time.trim(),
+    reason: reason.trim(),
+    status: 'Scheduled',
+    createdAt: new Date().toISOString(),
+  };
+
+  const updatedAppointments = [...appointments, newAppointment];
+
+  try {
+    await AsyncStorage.setItem(
+      APPOINTMENTS_STORAGE_KEY,
+      JSON.stringify(updatedAppointments)
+    );
+
+    setAppointments(updatedAppointments);
+    setAppointmentForm({
+      petId: '',
+      clinicName: '',
+      date: '',
+      time: '',
+      reason: '',
+    });
+
+    Alert.alert('Appointment saved', 'Your appointment has been saved.');
+    setScreen('appointments');
+  } catch (error) {
+    console.error('Could not book appointment:', error);
+    Alert.alert(
+      'Booking failed',
+      'We could not save your appointment. Please try again.'
+    );
+  }
+}
+
 
   const selectedPet = pets.find(
     (pet) => pet.id === selectedPetId
@@ -1810,6 +1876,18 @@ async function openClinicDirections(clinic) {
             '🗺️ Get Directions',
             () => openClinicDirections(clinic)
           )}
+          {renderButton(
+  'Book Appointment',
+  () => {
+    setAppointmentForm((previous) => ({
+      ...previous,
+      clinicName: clinic.name,
+    }));
+
+    setScreen('bookAppointment');
+  },
+  'secondary'
+)}
         </View>
       ))}
 
@@ -2074,14 +2152,24 @@ async function openClinicDirections(clinic) {
       content = renderSettings();
       break;
 
-    case 'veterinarians':
-      content = renderVeterinarians();
-      break;
+    
+case 'veterinarians':
+  content = renderVeterinarians();
+  break;
 
-    case 'home':
-    default:
-      content = renderHome();
-      break;
+case 'bookAppointment':
+  content = renderAppointmentForm();
+  break;
+
+case 'appointments':
+  content = renderAppointments();
+  break;
+
+case 'home':
+default:
+  content = renderHome();
+  break;
+
   }
 
   const showBottomNav = !FORM_SCREENS.includes(screen);
