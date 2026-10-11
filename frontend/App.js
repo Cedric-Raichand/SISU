@@ -333,6 +333,100 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     }
   }
 
+  function updateAppointmentForm(field, value) {
+    setAppointmentForm((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  }
+
+  function openAppointmentForm(clinicName = '') {
+    setAppointmentForm({
+      petId: pets.length === 1 ? pets[0].id : '',
+      clinicName,
+      date: '',
+      time: '',
+      reason: '',
+    });
+    setScreen('bookAppointment');
+  }
+
+  async function bookAppointment() {
+    const pet = pets.find((item) => item.id === appointmentForm.petId);
+    const clinicName = appointmentForm.clinicName.trim();
+    const date = appointmentForm.date.trim();
+    const time = appointmentForm.time.trim();
+    const reason = appointmentForm.reason.trim();
+
+    if (!pet) {
+      Alert.alert('Choose a pet', 'Please select a pet for this visit.');
+      return;
+    }
+
+    if (!clinicName) {
+      Alert.alert(
+        'Missing information',
+        'Please enter the clinic name.'
+      );
+      return;
+    }
+
+    if (!date || !isValidDate(date)) {
+      Alert.alert(
+        'Invalid date',
+        'Enter a valid date using YYYY-MM-DD, for example 2026-10-20.'
+      );
+      return;
+    }
+
+    if (date < getTodayString()) {
+      Alert.alert(
+        'Check the date',
+        'The appointment date cannot be in the past.'
+      );
+      return;
+    }
+
+    if (!time) {
+      Alert.alert('Missing information', 'Please enter a time.');
+      return;
+    }
+
+    if (!reason) {
+      Alert.alert(
+        'Missing information',
+        'Please enter the reason for the visit.'
+      );
+      return;
+    }
+
+    const appointment = {
+      id: createId(),
+      petId: pet.id,
+      petName: pet.name,
+      clinicName,
+      date,
+      time,
+      reason,
+      status: 'Scheduled',
+    };
+
+    const updatedAppointments = [...appointments, appointment].sort(
+      (a, b) => a.date.localeCompare(b.date)
+    );
+
+    await saveAppointments(updatedAppointments);
+
+    setAppointmentForm({
+      petId: '',
+      clinicName: '',
+      date: '',
+      time: '',
+      reason: '',
+    });
+    setScreen('appointments');
+  }
+
   const selectedPet = pets.find(
     (pet) => pet.id === selectedPetId
   );
@@ -1837,9 +1931,14 @@ async function openClinicDirections(clinic) {
           ))
         )}
 
+        {renderButton('+ Book an Appointment', () =>
+          openAppointmentForm()
+        )}
+
         {renderButton(
           'Find a Veterinarian',
-          () => setScreen('veterinarians')
+          () => setScreen('veterinarians'),
+          'secondary'
         )}
       </ScrollView>
     );
@@ -1851,6 +1950,15 @@ async function openClinicDirections(clinic) {
       {renderHeader(
         'Find a Veterinarian',
         'Discover veterinary care near you.'
+      )}
+
+      {renderButton('📅 Book an Appointment', () =>
+        openAppointmentForm()
+      )}
+      {renderButton(
+        '🗓️ My Appointments',
+        () => setScreen('appointments'),
+        'secondary'
       )}
 
       <View style={styles.card}>
@@ -1944,6 +2052,12 @@ async function openClinicDirections(clinic) {
           {renderButton(
             '🗺️ Get Directions',
             () => openClinicDirections(clinic)
+          )}
+
+          {renderButton(
+            '📅 Book Appointment Here',
+            () => openAppointmentForm(clinic.name),
+            'secondary'
           )}
         </View>
       ))}
@@ -2213,6 +2327,14 @@ async function openClinicDirections(clinic) {
       content = renderVeterinarians();
       break;
 
+    case 'bookAppointment':
+      content = renderAppointmentForm();
+      break;
+
+    case 'appointments':
+      content = renderAppointments();
+      break;
+
     case 'home':
     default:
       content = renderHome();
@@ -2420,6 +2542,17 @@ const styles = StyleSheet.create({
     borderColor: '#E7EEEA',
   },
 
+  input: {
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: '#153E35',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 16,
+  },
   helperText: {
     fontSize: 12,
     lineHeight: 19,
