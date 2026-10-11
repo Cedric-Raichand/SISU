@@ -8,7 +8,8 @@ import {
   StatusBar,
   Pressable,
   Alert,
-  Linking
+  Linking,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
@@ -87,6 +88,7 @@ const FORM_SCREENS = [
   'editHealthRecord',
   'addVaccination',
   'editVaccination',
+  'bookAppointment',
 ];
 
 const NAV_ITEMS = [
@@ -330,72 +332,6 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       );
     }
   }
-  
-function updateAppointmentForm(field, value) {
-  setAppointmentForm((previous) => ({
-    ...previous,
-    [field]: value,
-  }));
-}
-
-async function bookAppointment() {
-  const { petId, clinicName, date, time, reason } = appointmentForm;
-
-  if (!petId || !clinicName.trim() || !date.trim() || !time.trim() || !reason.trim()) {
-    Alert.alert(
-      'Missing information',
-      'Please select a pet and enter the clinic, date, time, and reason for the appointment.'
-    );
-    return;
-  }
-
-  const selectedPet = pets.find((pet) => pet.id === petId);
-
-  if (!selectedPet) {
-    Alert.alert('Pet not found', 'Please select a valid pet.');
-    return;
-  }
-
-  const newAppointment = {
-    id: `appointment-${Date.now()}`,
-    petId: selectedPet.id,
-    petName: selectedPet.name,
-    clinicName: clinicName.trim(),
-    date: date.trim(),
-    time: time.trim(),
-    reason: reason.trim(),
-    status: 'Scheduled',
-    createdAt: new Date().toISOString(),
-  };
-
-  const updatedAppointments = [...appointments, newAppointment];
-
-  try {
-    await AsyncStorage.setItem(
-      APPOINTMENTS_STORAGE_KEY,
-      JSON.stringify(updatedAppointments)
-    );
-
-    setAppointments(updatedAppointments);
-    setAppointmentForm({
-      petId: '',
-      clinicName: '',
-      date: '',
-      time: '',
-      reason: '',
-    });
-
-    Alert.alert('Appointment saved', 'Your appointment has been saved.');
-    setScreen('appointments');
-  } catch (error) {
-    console.error('Could not book appointment:', error);
-    Alert.alert(
-      'Booking failed',
-      'We could not save your appointment. Please try again.'
-    );
-  }
-}
-
 
   const selectedPet = pets.find(
     (pet) => pet.id === selectedPetId
@@ -1776,6 +1712,139 @@ async function openClinicDirections(clinic) {
     );
   }
 }
+  function renderAppointmentForm() {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          'Book an Appointment',
+          'Schedule a veterinary visit for your pet.'
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Choose your pet</Text>
+
+          {pets.map((pet) => (
+            <Pressable
+              key={pet.id}
+              onPress={() => updateAppointmentForm('petId', pet.id)}
+              style={[
+                styles.card,
+                appointmentForm.petId === pet.id && {
+                  borderWidth: 2,
+                  borderColor: '#23866B',
+                },
+              ]}
+            >
+              <Text style={styles.summaryText}>
+                {appointmentForm.petId === pet.id ? '✓ ' : ''}
+                {pet.name} ({pet.species})
+              </Text>
+            </Pressable>
+          ))}
+
+          <Text style={styles.sectionTitle}>Clinic name</Text>
+          <Text style={styles.helperText}>
+            You can enter a clinic name manually.
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            value={appointmentForm.clinicName}
+            onChangeText={(value) =>
+              updateAppointmentForm('clinicName', value)
+            }
+            placeholder="Veterinary clinic name"
+          />
+
+          <Text style={styles.sectionTitle}>Date</Text>
+          <TextInput
+            style={styles.input}
+            value={appointmentForm.date}
+            onChangeText={(value) =>
+              updateAppointmentForm('date', value)
+            }
+            placeholder="YYYY-MM-DD"
+          />
+
+          <Text style={styles.sectionTitle}>Time</Text>
+          <TextInput
+            style={styles.input}
+            value={appointmentForm.time}
+            onChangeText={(value) =>
+              updateAppointmentForm('time', value)
+            }
+            placeholder="e.g. 10:30 AM"
+          />
+
+          <Text style={styles.sectionTitle}>Reason for visit</Text>
+          <TextInput
+            style={styles.input}
+            value={appointmentForm.reason}
+            onChangeText={(value) =>
+              updateAppointmentForm('reason', value)
+            }
+            placeholder="e.g. Vaccination or check-up"
+          />
+
+          {renderButton('Save Appointment', bookAppointment)}
+
+          {renderButton(
+            'Cancel',
+            () => setScreen('veterinarians'),
+            'secondary'
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function renderAppointments() {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {renderHeader(
+          'My Appointments',
+          'View your saved veterinary visits.'
+        )}
+
+        {appointments.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.summaryText}>
+              No appointments saved yet.
+            </Text>
+          </View>
+        ) : (
+          appointments.map((appointment) => (
+            <View key={appointment.id} style={styles.card}>
+              <Text style={styles.sectionTitle}>
+                {appointment.clinicName}
+              </Text>
+              <Text style={styles.summaryText}>
+                Pet: {appointment.petName}
+              </Text>
+              <Text style={styles.summaryText}>
+                Date: {appointment.date}
+              </Text>
+              <Text style={styles.summaryText}>
+                Time: {appointment.time}
+              </Text>
+              <Text style={styles.summaryText}>
+                Reason: {appointment.reason}
+              </Text>
+              <Text style={styles.helperText}>
+                Status: {appointment.status}
+              </Text>
+            </View>
+          ))
+        )}
+
+        {renderButton(
+          'Find a Veterinarian',
+          () => setScreen('veterinarians')
+        )}
+      </ScrollView>
+    );
+  }
+
   function renderVeterinarians() {
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -1876,18 +1945,6 @@ async function openClinicDirections(clinic) {
             '🗺️ Get Directions',
             () => openClinicDirections(clinic)
           )}
-          {renderButton(
-  'Book Appointment',
-  () => {
-    setAppointmentForm((previous) => ({
-      ...previous,
-      clinicName: clinic.name,
-    }));
-
-    setScreen('bookAppointment');
-  },
-  'secondary'
-)}
         </View>
       ))}
 
@@ -2152,24 +2209,14 @@ async function openClinicDirections(clinic) {
       content = renderSettings();
       break;
 
-    
-case 'veterinarians':
-  content = renderVeterinarians();
-  break;
+    case 'veterinarians':
+      content = renderVeterinarians();
+      break;
 
-case 'bookAppointment':
-  content = renderAppointmentForm();
-  break;
-
-case 'appointments':
-  content = renderAppointments();
-  break;
-
-case 'home':
-default:
-  content = renderHome();
-  break;
-
+    case 'home':
+    default:
+      content = renderHome();
+      break;
   }
 
   const showBottomNav = !FORM_SCREENS.includes(screen);
