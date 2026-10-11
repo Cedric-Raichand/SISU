@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
   TextInput,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
@@ -29,6 +30,9 @@ import {
   cancelPetVaccinationReminders,
   cancelAllVaccinationReminders,
   reconcileVaccinationReminders,
+  scheduleAppointmentReminder,
+  cancelAppointmentReminder,
+  cancelAppointmentReminders,
 } from './src/services/vaccinationNotifications';
 
 const STORAGE_KEY = 'sisu_pets';
@@ -78,6 +82,14 @@ const EMPTY_VACCINATION_FORM = {
   nextDueDate: '',
   veterinarian: '',
   notes: '',
+};
+
+const EMPTY_APPOINTMENT_FORM = {
+  petId: '',
+  clinicName: '',
+  date: '',
+  time: '',
+  reason: '',
 };
 
 // Screens where the bottom navigation is hidden (add / edit forms)
@@ -139,6 +151,142 @@ function isValidDate(value) {
     date.getMonth() === month - 1 &&
     date.getDate() === day
   );
+}
+
+// ---- Appointment helpers ----
+
+function padTwo(value) {
+  return String(value).padStart(2, '0');
+}
+
+// Accepts "10:30 AM", "10:30am", "10am", or a 24-hour time like "14:30".
+// Returns { time24: 'HH:MM', display: 'h:MM AM' }, or null if invalid.
+function parseTimeInput(value) {
+  const text = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, '');
+
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = match[2] ? Number(match[2]) : 0;
+  const period = match[3];
+
+  if (minutes > 59) {
+    return null;
+  }
+
+  if (period) {
+    if (hours < 1 || hours > 12) {
+      return null;
+    }
+
+    if (period === 'pm' && hours !== 12) {
+      hours += 12;
+    }
+
+    if (period === 'am' && hours === 12) {
+      hours = 0;
+    }
+  } else if (!match[2] || hours > 23) {
+    // Without AM/PM, only a 24-hour time such as 14:30 is accepted.
+    return null;
+  }
+
+  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+
+  return {
+    time24: `${padTwo(hours)}:${padTwo(minutes)}`,
+    display: `${displayHours}:${padTwo(minutes)} ${
+      hours >= 12 ? 'PM' : 'AM'
+    }`,
+  };
+}
+
+// Combines an appointment's date and 24-hour time into a Date.
+function getAppointmentDateTime(appointment) {
+  if (!appointment || !isValidDate(appointment.date || '')) {
+    return null;
+  }
+
+  const [year, month, day] = appointment.date.split('-').map(Number);
+  const [hours, minutes] = /^\d{2}:\d{2}$/.test(
+    appointment.time24 || ''
+  )
+    ? appointment.time24.split(':').map(Number)
+    : [0, 0];
+
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+}
+
+// Sorts by date first, then by time of day.
+function compareAppointments(a, b) {
+  const keyA = `${a.date || ''} ${a.time24 || '00:00'}`;
+  const keyB = `${b.date || ''} ${b.time24 || '00:00'}`;
+
+  return keyA.localeCompare(keyB);
+}
+
+// Upgrades appointments saved by earlier versions of the app.
+function normalizeAppointment(appointment) {
+  const parsed = appointment.time24
+    ? null
+    : parseTimeInput(appointment.time);
+
+  return {
+    ...appointment,
+    time: parsed ? parsed.display : appointment.time || '',
+    time24: appointment.time24 || (parsed ? parsed.time24 : ''),
+    status: appointment.status || 'Scheduled',
+    notificationId: appointment.notificationId || null,
+  };
+}
+
+// 'Cancelled', 'Past', or 'Scheduled'
+function getAppointmentState(appointment) {
+  if (appointment.status === 'Cancelled') {
+    return 'Cancelled';
+  }
+
+  const when = getAppointmentDateTime(appointment);
+
+  if (when && when.getTime() < Date.now()) {
+    return 'Past';
+  }
+
+  return 'Scheduled';
+}
+
+// Alert.alert with buttons does not show on web, so use the
+// browser's confirm dialog there.
+function confirmAction({
+  title,
+  message,
+  confirmLabel,
+  cancelLabel = 'Cancel',
+  onConfirm,
+}) {
+  if (Platform.OS === 'web') {
+    const confirmed =
+      typeof window !== 'undefined' &&
+      window.confirm(`${title}\n\n${message}`);
+
+    if (confirmed) {
+      onConfirm();
+    }
+
+    return;
+  }
+
+  Alert.alert(title, message, [
+    { text: cancelLabel, style: 'cancel' },
+    { text: confirmLabel, style: 'destructive', onPress: onConfirm },
+  ]);
 }
 
 function getVaccinationStatus(nextDueDate) {
@@ -236,12 +384,10 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
 
   const [appointments, setAppointments] = useState([]);
   const [appointmentForm, setAppointmentForm] = useState({
-    petId: '',
-    clinicName: '',
-    date: '',
-    time: '',
-    reason: '',
+    ...EMPTY_APPOINTMENT_FORM,
   });
+  const [editingAppointmentId, setEditingAppointmentId] =
+    useState(null);
 
   useEffect(() => {
     loadPets();
@@ -308,13 +454,22 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       );
 
       if (storedAppointments) {
-        setAppointments(JSON.parse(storedAppointments));
+        const parsedAppointments = JSON.parse(storedAppointments);
+
+        if (Array.isArray(parsedAppointments)) {
+          setAppointments(
+            parsedAppointments
+              .map(normalizeAppointment)
+              .sort(compareAppointments)
+          );
+        }
       }
     } catch (error) {
       console.error('Could not load appointments:', error);
     }
   }
 
+  // Returns true if the appointments were saved.
   async function saveAppointments(updatedAppointments) {
     try {
       await AsyncStorage.setItem(
@@ -323,6 +478,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       );
 
       setAppointments(updatedAppointments);
+      return true;
     } catch (error) {
       console.error('Could not save appointments:', error);
 
@@ -330,6 +486,8 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
         'Saving failed',
         'Your appointment could not be saved. Please try again.'
       );
+
+      return false;
     }
   }
 
@@ -341,21 +499,46 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   function openAppointmentForm(clinicName = '') {
+    setEditingAppointmentId(null);
     setAppointmentForm({
+      ...EMPTY_APPOINTMENT_FORM,
       petId: pets.length === 1 ? pets[0].id : '',
       clinicName,
-      date: '',
-      time: '',
-      reason: '',
     });
     setScreen('bookAppointment');
   }
 
+  function openEditAppointment(appointment) {
+    setEditingAppointmentId(appointment.id);
+    setAppointmentForm({
+      petId: appointment.petId || '',
+      clinicName: appointment.clinicName || '',
+      date: appointment.date || '',
+      time: appointment.time || '',
+      reason: appointment.reason || '',
+    });
+    setScreen('bookAppointment');
+  }
+
+  // Creates a new appointment, or saves changes when editing one.
   async function bookAppointment() {
+    const existing = editingAppointmentId
+      ? appointments.find((item) => item.id === editingAppointmentId)
+      : null;
+
+    if (editingAppointmentId && !existing) {
+      Alert.alert(
+        'Appointment not found',
+        'This appointment no longer exists.'
+      );
+      setEditingAppointmentId(null);
+      setScreen('appointments');
+      return;
+    }
+
     const pet = pets.find((item) => item.id === appointmentForm.petId);
     const clinicName = appointmentForm.clinicName.trim();
     const date = appointmentForm.date.trim();
-    const time = appointmentForm.time.trim();
     const reason = appointmentForm.reason.trim();
 
     if (!pet) {
@@ -379,16 +562,31 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       return;
     }
 
-    if (date < getTodayString()) {
+    if (!appointmentForm.time.trim()) {
+      Alert.alert('Missing information', 'Please enter a time.');
+      return;
+    }
+
+    const parsedTime = parseTimeInput(appointmentForm.time);
+
+    if (!parsedTime) {
       Alert.alert(
-        'Check the date',
-        'The appointment date cannot be in the past.'
+        'Invalid time',
+        'Enter a time like 10:30 AM or 14:30.'
       );
       return;
     }
 
-    if (!time) {
-      Alert.alert('Missing information', 'Please enter a time.');
+    const appointmentTime = getAppointmentDateTime({
+      date,
+      time24: parsedTime.time24,
+    });
+
+    if (appointmentTime.getTime() <= Date.now()) {
+      Alert.alert(
+        'Check the date and time',
+        'That date and time have already passed.'
+      );
       return;
     }
 
@@ -400,31 +598,116 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       return;
     }
 
+    const appointmentId = existing ? existing.id : createId();
+    const oldNotificationId = existing?.notificationId || null;
+
+    const scheduleUnchanged =
+      Boolean(existing) &&
+      existing.date === date &&
+      existing.time24 === parsedTime.time24;
+
+    // Schedule the new reminder (1 hour before the visit).
+    let newNotificationId = null;
+
+    try {
+      newNotificationId = await scheduleAppointmentReminder({
+        appointmentId,
+        petName: pet.name,
+        clinicName,
+        date,
+        time24: parsedTime.time24,
+      });
+    } catch (error) {
+      console.error('Could not schedule appointment reminder:', error);
+    }
+
+    // If scheduling fails but the date and time have not changed,
+    // keep the existing reminder.
+    if (!newNotificationId && scheduleUnchanged && oldNotificationId) {
+      newNotificationId = oldNotificationId;
+    }
+
     const appointment = {
-      id: createId(),
+      id: appointmentId,
       petId: pet.id,
       petName: pet.name,
       clinicName,
       date,
-      time,
+      time: parsedTime.display,
+      time24: parsedTime.time24,
       reason,
       status: 'Scheduled',
+      notificationId: newNotificationId,
     };
 
-    const updatedAppointments = [...appointments, appointment].sort(
-      (a, b) => a.date.localeCompare(b.date)
-    );
+    const updatedAppointments = (
+      existing
+        ? appointments.map((item) =>
+            item.id === appointmentId ? appointment : item
+          )
+        : [...appointments, appointment]
+    ).sort(compareAppointments);
 
-    await saveAppointments(updatedAppointments);
+    const saved = await saveAppointments(updatedAppointments);
 
-    setAppointmentForm({
-      petId: '',
-      clinicName: '',
-      date: '',
-      time: '',
-      reason: '',
-    });
+    if (!saved) {
+      // Don't leave a reminder for an appointment that wasn't saved.
+      if (newNotificationId && newNotificationId !== oldNotificationId) {
+        await cancelAppointmentReminder(newNotificationId);
+      }
+
+      return;
+    }
+
+    // The old reminder is replaced when the date or time changed.
+    if (oldNotificationId && oldNotificationId !== newNotificationId) {
+      await cancelAppointmentReminder(oldNotificationId);
+    }
+
+    setAppointmentForm({ ...EMPTY_APPOINTMENT_FORM });
+    setEditingAppointmentId(null);
     setScreen('appointments');
+  }
+
+  // Marks an appointment as cancelled and removes its reminder.
+  function cancelAppointment(appointment) {
+    confirmAction({
+      title: 'Cancel appointment',
+      message: `Cancel ${appointment.petName}’s visit to ${appointment.clinicName} on ${appointment.date} at ${appointment.time}? Its reminder will be removed.`,
+      confirmLabel: 'Cancel appointment',
+      cancelLabel: 'Keep it',
+      onConfirm: async () => {
+        const updatedAppointments = appointments.map((item) =>
+          item.id === appointment.id
+            ? { ...item, status: 'Cancelled', notificationId: null }
+            : item
+        );
+
+        const saved = await saveAppointments(updatedAppointments);
+
+        if (saved) {
+          await cancelAppointmentReminder(appointment.notificationId);
+        }
+      },
+    });
+  }
+
+  // Permanently removes an appointment and its reminder.
+  function deleteAppointment(appointment) {
+    confirmAction({
+      title: 'Delete appointment',
+      message: `Delete ${appointment.petName}’s visit to ${appointment.clinicName} on ${appointment.date}? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        const saved = await saveAppointments(
+          appointments.filter((item) => item.id !== appointment.id)
+        );
+
+        if (saved) {
+          await cancelAppointmentReminder(appointment.notificationId);
+        }
+      },
+    });
   }
 
   const selectedPet = pets.find(
@@ -536,7 +819,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   function deletePet(petId) {
     Alert.alert(
       'Delete pet',
-      'Are you sure you want to delete this pet and its associated records?',
+      'Are you sure you want to delete this pet and its associated records and appointments?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -547,6 +830,18 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
 
             // Cancel every saved vaccination reminder for this pet.
             await cancelPetVaccinationReminders(petToDelete);
+
+            // Remove this pet's appointments and their reminders.
+            const petAppointments = appointments.filter(
+              (item) => item.petId === petId
+            );
+
+            if (petAppointments.length > 0) {
+              await cancelAppointmentReminders(petAppointments);
+              await saveAppointments(
+                appointments.filter((item) => item.petId !== petId)
+              );
+            }
 
             setPets((previous) =>
               previous.filter((pet) => pet.id !== petId)
@@ -937,6 +1232,8 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
           style: 'destructive',
           onPress: async () => {
             await cancelAllVaccinationReminders(pets);
+            await cancelAppointmentReminders(appointments);
+            await saveAppointments([]);
 
             setPets(INITIAL_PETS.map(normalizePet));
             setSelectedPetId(null);
@@ -952,7 +1249,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   function clearAllData() {
     Alert.alert(
       'Clear all data',
-      'This permanently deletes every pet, medical record, and vaccination saved on this device.',
+      'This permanently deletes every pet, medical record, vaccination, and appointment saved on this device.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -960,6 +1257,8 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
           style: 'destructive',
           onPress: async () => {
             await cancelAllVaccinationReminders(pets);
+            await cancelAppointmentReminders(appointments);
+            await saveAppointments([]);
 
             setPets([]);
             setSelectedPetId(null);
@@ -1807,11 +2106,15 @@ async function openClinicDirections(clinic) {
   }
 }
   function renderAppointmentForm() {
+    const editing = Boolean(editingAppointmentId);
+
     return (
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
-          'Book an Appointment',
-          'Schedule a veterinary visit for your pet.'
+          editing ? 'Edit Appointment' : 'Book an Appointment',
+          editing
+            ? 'Update the details of this veterinary visit.'
+            : 'Schedule a veterinary visit for your pet.'
         )}
 
         <View style={styles.card}>
@@ -1867,8 +2170,13 @@ async function openClinicDirections(clinic) {
             onChangeText={(value) =>
               updateAppointmentForm('time', value)
             }
-            placeholder="e.g. 10:30 AM"
+            placeholder="e.g. 10:30 AM or 14:30"
           />
+          <Text style={styles.helperText}>
+            Use 10:30 AM or 24-hour time like 14:30. If notifications
+            are available on your device, Sisu reminds you 1 hour
+            before the visit.
+          </Text>
 
           <Text style={styles.sectionTitle}>Reason for visit</Text>
           <TextInput
@@ -1880,11 +2188,17 @@ async function openClinicDirections(clinic) {
             placeholder="e.g. Vaccination or check-up"
           />
 
-          {renderButton('Save Appointment', bookAppointment)}
+          {renderButton(
+            editing ? 'Save Changes' : 'Save Appointment',
+            bookAppointment
+          )}
 
           {renderButton(
             'Cancel',
-            () => setScreen('veterinarians'),
+            () => {
+              setEditingAppointmentId(null);
+              setScreen(editing ? 'appointments' : 'veterinarians');
+            },
             'secondary'
           )}
         </View>
@@ -1892,12 +2206,104 @@ async function openClinicDirections(clinic) {
     );
   }
 
+  function renderAppointmentCard(appointment) {
+    const state = getAppointmentState(appointment);
+    const isScheduled = state === 'Scheduled';
+
+    const stateColor =
+      state === 'Scheduled'
+        ? '#027A48'
+        : state === 'Cancelled'
+        ? '#B42318'
+        : '#667085';
+
+    return (
+      <View key={appointment.id} style={styles.card}>
+        <Text style={styles.sectionTitle}>
+          {appointment.clinicName}
+        </Text>
+        <Text style={styles.summaryText}>
+          Pet: {appointment.petName}
+        </Text>
+        <Text style={styles.summaryText}>
+          Date: {appointment.date}
+        </Text>
+        <Text style={styles.summaryText}>
+          Time: {appointment.time}
+        </Text>
+        <Text style={styles.summaryText}>
+          Reason: {appointment.reason}
+        </Text>
+
+        <Text
+          style={[
+            styles.helperText,
+            { color: stateColor, fontWeight: '800' },
+          ]}
+        >
+          Status: {state}
+        </Text>
+
+        {isScheduled && (
+          <Text style={styles.helperText}>
+            {appointment.notificationId
+              ? '🔔 Reminder set for 1 hour before'
+              : 'No reminder set'}
+          </Text>
+        )}
+
+        <View style={styles.buttonRow}>
+          <View style={styles.buttonHalf}>
+            {renderButton(
+              isScheduled ? 'Edit' : 'Reschedule',
+              () => openEditAppointment(appointment),
+              'secondary'
+            )}
+          </View>
+          <View style={styles.buttonHalf}>
+            {isScheduled
+              ? renderButton(
+                  'Cancel visit',
+                  () => cancelAppointment(appointment),
+                  'secondary'
+                )
+              : renderButton(
+                  'Delete',
+                  () => deleteAppointment(appointment),
+                  'danger'
+                )}
+          </View>
+        </View>
+
+        {isScheduled &&
+          renderButton(
+            'Delete',
+            () => deleteAppointment(appointment),
+            'danger'
+          )}
+      </View>
+    );
+  }
+
   function renderAppointments() {
+    const upcoming = appointments
+      .filter((item) => getAppointmentState(item) === 'Scheduled')
+      .sort(compareAppointments);
+
+    // Past and cancelled visits, most recent first.
+    const earlier = appointments
+      .filter((item) => getAppointmentState(item) !== 'Scheduled')
+      .sort((a, b) => compareAppointments(b, a));
+
     return (
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           'My Appointments',
-          'View your saved veterinary visits.'
+          'View and manage your veterinary visits.'
+        )}
+
+        {renderButton('+ Book an Appointment', () =>
+          openAppointmentForm()
         )}
 
         {appointments.length === 0 ? (
@@ -1907,32 +2313,37 @@ async function openClinicDirections(clinic) {
             </Text>
           </View>
         ) : (
-          appointments.map((appointment) => (
-            <View key={appointment.id} style={styles.card}>
-              <Text style={styles.sectionTitle}>
-                {appointment.clinicName}
-              </Text>
-              <Text style={styles.summaryText}>
-                Pet: {appointment.petName}
-              </Text>
-              <Text style={styles.summaryText}>
-                Date: {appointment.date}
-              </Text>
-              <Text style={styles.summaryText}>
-                Time: {appointment.time}
-              </Text>
-              <Text style={styles.summaryText}>
-                Reason: {appointment.reason}
-              </Text>
-              <Text style={styles.helperText}>
-                Status: {appointment.status}
-              </Text>
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Upcoming</Text>
+              <Text style={styles.sectionHint}>{upcoming.length}</Text>
             </View>
-          ))
-        )}
 
-        {renderButton('+ Book an Appointment', () =>
-          openAppointmentForm()
+            {upcoming.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.summaryText}>
+                  No upcoming appointments.
+                </Text>
+              </View>
+            ) : (
+              upcoming.map(renderAppointmentCard)
+            )}
+
+            {earlier.length > 0 && (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>
+                    Past and cancelled
+                  </Text>
+                  <Text style={styles.sectionHint}>
+                    {earlier.length}
+                  </Text>
+                </View>
+
+                {earlier.map(renderAppointmentCard)}
+              </>
+            )}
+          </>
         )}
 
         {renderButton(
