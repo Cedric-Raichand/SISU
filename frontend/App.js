@@ -32,6 +32,8 @@ import {
 
 const STORAGE_KEY = 'sisu_pets';
 
+const APPOINTMENTS_STORAGE_KEY = 'sisu_appointments';
+
 const INITIAL_PETS = [
   {
     id: 'pet-buddy',
@@ -230,8 +232,18 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
 
   const [editingPetId, setEditingPetId] = useState(null);
 
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentForm, setAppointmentForm] = useState({
+    petId: '',
+    clinicName: '',
+    date: '',
+    time: '',
+    reason: '',
+  });
+
   useEffect(() => {
     loadPets();
+    loadAppointments();
   }, []);
 
   useEffect(() => {
@@ -283,6 +295,38 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       Alert.alert(
         'Saving error',
         'Your changes could not be saved locally.'
+      );
+    }
+  }
+
+  async function loadAppointments() {
+    try {
+      const storedAppointments = await AsyncStorage.getItem(
+        APPOINTMENTS_STORAGE_KEY
+      );
+
+      if (storedAppointments) {
+        setAppointments(JSON.parse(storedAppointments));
+      }
+    } catch (error) {
+      console.error('Could not load appointments:', error);
+    }
+  }
+
+  async function saveAppointments(updatedAppointments) {
+    try {
+      await AsyncStorage.setItem(
+        APPOINTMENTS_STORAGE_KEY,
+        JSON.stringify(updatedAppointments)
+      );
+
+      setAppointments(updatedAppointments);
+    } catch (error) {
+      console.error('Could not save appointments:', error);
+
+      Alert.alert(
+        'Saving failed',
+        'Your appointment could not be saved. Please try again.'
       );
     }
   }
@@ -1511,6 +1555,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       </ScrollView>
     );
   }
+
 async function searchNearbyClinics() {
   setClinicLoading(true);
   setClinicError('');
