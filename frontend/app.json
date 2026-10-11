@@ -7,8 +7,14 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "plugins": [
-      "expo-notifications"
-    ],
+  "expo-notifications",
+  [
+    "expo-location",
+    {
+      "locationWhenInUsePermission": "Allow Sisu to find veterinary clinics near you."
+    }
+  ]
+],
     "ios": {
       "supportsTablet": true
     },
