@@ -194,6 +194,40 @@ app.patch('/api/pets/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/pets/:id', async (req, res) => {
+  try {
+    const petId = req.params.id;
+
+    // Check whether the ID is valid
+    if (!mongoose.isValidObjectId(petId)) {
+      return res.status(400).json({
+        message: 'Invalid pet ID.',
+      });
+    }
+
+    // Find and delete the pet
+    const pet = await Pet.findByIdAndDelete(petId);
+
+    // Check whether the pet exists
+    if (!pet) {
+      return res.status(404).json({
+        message: 'Pet not found.',
+      });
+    }
+
+    res.status(200).json({
+      message: 'Pet deleted successfully!',
+      pet,
+    });
+  } catch (error) {
+    console.error('Error deleting pet:', error.message);
+
+    res.status(500).json({
+      message: 'Failed to delete pet.',
+    });
+  }
+});
+
 
 
 
