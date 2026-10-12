@@ -21,7 +21,8 @@ app.get('/', (req, res) => {
 });
 
 
-app.post('/api/pets', async (req, res) => {
+
+app.post('/api/pets', protect, async (req, res) => {
   try {
     const { name, species, age } = req.body;
 
@@ -51,6 +52,7 @@ app.post('/api/pets', async (req, res) => {
       name: name.trim(),
       species: species.trim(),
       ...(age !== undefined ? { age } : {}),
+      owner: req.user.userId,
     });
 
     res.status(201).json({
@@ -65,6 +67,7 @@ app.post('/api/pets', async (req, res) => {
     });
   }
 });
+
 
 app.get('/api/pets', async (req, res) => {
   try {
@@ -238,10 +241,6 @@ app.get('/api/auth/me', protect, (req, res) => {
     user: req.user,
   });
 });
-
-
-
-
 
 
 async function startServer() {

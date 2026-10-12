@@ -8,14 +8,22 @@ const petSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
     species: {
       type: String,
       required: true,
       trim: true,
     },
+
     age: {
       type: Number,
       min: 0,
+    },
+
+    owner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
     },
   },
   {
