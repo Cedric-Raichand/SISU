@@ -87,17 +87,23 @@ app.get('/api/pets', async (req, res) => {
   }
 });
 
-app.get('/api/pets/:id', async (req, res) => {
-  try {
-    const petId = req.params.id;
 
-    if (!mongoose.isValidObjectId(petId)) {
+app.get('/api/pets/:id', protect, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate the pet ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         message: 'Invalid pet ID.',
       });
     }
 
-    const pet = await Pet.findById(petId);
+    // Find the pet only if it belongs to the logged-in owner
+    const pet = await Pet.findOne({
+      _id: id,
+      owner: req.user.userId,
+    });
 
     if (!pet) {
       return res.status(404).json({
