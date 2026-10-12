@@ -5,6 +5,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Pet = require('./models/Pet');
 const authRoutes = require('./routes/authRoutes');
+const { protect } = require('./middleware/authMiddleware');
 
 const app = express();
 
@@ -230,6 +231,14 @@ app.delete('/api/pets/:id', async (req, res) => {
     });
   }
 });
+
+app.get('/api/auth/me', protect, (req, res) => {
+  res.status(200).json({
+    message: 'You are authenticated!',
+    user: req.user,
+  });
+});
+
 
 
 
