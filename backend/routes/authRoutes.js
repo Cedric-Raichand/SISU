@@ -141,4 +141,72 @@ router.post('/login', async (req, res) => {
   }
 });
 
+
+router.post('/apply-as-vet', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      typeof email !== 'string' ||
+      !email.trim() ||
+      typeof password !== 'string' ||
+      password.length < 8
+    ) {
+      return res.status(400).json({
+        message:
+          'Name and email are required. Password must be at least 8 characters.',
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        message: 'An account with this email already exists.',
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const vet = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: 'vet',
+      vetApprovalStatus: 'pending',
+    });
+
+    res.status(201).json({
+      message:
+        'Veterinarian application submitted. Your account is pending approval.',
+      user: {
+        id: vet._id,
+        name: vet.name,
+        email: vet.email,
+        role: vet.role,
+        vetApprovalStatus: vet.vetApprovalStatus,
+      },
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: 'An account with this email already exists.',
+      });
+    }
+
+    console.error('Veterinarian application error:', error.message);
+
+    res.status(500).json({
+      message: 'Veterinarian application failed.',
+    });
+  }
+});
+
+
 module.exports = router;
