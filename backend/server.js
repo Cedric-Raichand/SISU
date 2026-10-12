@@ -124,7 +124,8 @@ app.get('/api/pets/:id', protect, async (req, res) => {
   }
 });
 
-app.patch('/api/pets/:id', async (req, res) => {
+
+app.patch('/api/pets/:id', protect, async (req, res) => {
   try {
     const petId = req.params.id;
     const { name, species, age } = req.body;
@@ -179,8 +180,12 @@ app.patch('/api/pets/:id', async (req, res) => {
       });
     }
 
-    const pet = await Pet.findByIdAndUpdate(
-      petId,
+    // Update only a pet owned by the logged-in user
+    const pet = await Pet.findOneAndUpdate(
+      {
+        _id: petId,
+        owner: req.user.userId,
+      },
       { $set: updates },
       {
         new: true,
@@ -206,6 +211,7 @@ app.patch('/api/pets/:id', async (req, res) => {
     });
   }
 });
+
 
 app.delete('/api/pets/:id', async (req, res) => {
   try {
