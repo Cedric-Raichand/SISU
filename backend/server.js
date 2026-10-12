@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const Pet = require('./models/Pet');
 const authRoutes = require('./routes/authRoutes');
 const { protect } = require('./middleware/authMiddleware');
+const { requireApprovedVet } = require('./middleware/vetMiddleware');
 
 const app = express();
 
@@ -257,6 +258,16 @@ app.get('/api/auth/me', protect, (req, res) => {
     user: req.user,
   });
 });
+app.get(
+  '/api/vet/test',
+  protect,
+  requireApprovedVet,
+  (req, res) => {
+    res.status(200).json({
+      message: 'Approved veterinarian access granted.',
+    });
+  }
+);
 
 
 async function startServer() {
