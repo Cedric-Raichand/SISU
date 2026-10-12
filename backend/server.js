@@ -111,6 +111,90 @@ app.get('/api/pets/:id', async (req, res) => {
   }
 });
 
+app.patch('/api/pets/:id', async (req, res) => {
+  try {
+    const petId = req.params.id;
+    const { name, species, age } = req.body;
+
+    // Check the pet ID
+    if (!mongoose.isValidObjectId(petId)) {
+      return res.status(400).json({
+        message: 'Invalid pet ID.',
+      });
+    }
+
+    // Only allow these fields to be updated
+    const updates = {};
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({
+          message: 'Name must be a non-empty string.',
+        });
+      }
+
+      updates.name = name.trim();
+    }
+
+    if (species !== undefined) {
+      if (typeof species !== 'string' || !species.trim()) {
+        return res.status(400).json({
+          message: 'Species must be a non-empty string.',
+        });
+      }
+
+      updates.species = species.trim();
+    }
+
+    if (age !== undefined) {
+      if (
+        typeof age !== 'number' ||
+        !Number.isFinite(age) ||
+        age < 0
+      ) {
+        return res.status(400).json({
+          message: 'Age must be a non-negative number.',
+        });
+      }
+
+      updates.age = age;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        message: 'Provide at least one valid field to update.',
+      });
+    }
+
+    const pet = await Pet.findByIdAndUpdate(
+      petId,
+      { $set: updates },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!pet) {
+      return res.status(404).json({
+        message: 'Pet not found.',
+      });
+    }
+
+    res.status(200).json({
+      message: 'Pet updated successfully!',
+      pet,
+    });
+  } catch (error) {
+    console.error('Error updating pet:', error.message);
+
+    res.status(500).json({
+      message: 'Failed to update pet.',
+    });
+  }
+});
+
+
 
 
 
