@@ -11,14 +11,32 @@ app.get('/', (req, res) => {
   res.send('Welcome to the Sisu API!');
 });
 
+
 app.post('/api/pets', (req, res) => {
-  const pet = req.body;
+  const { name, species, age } = req.body;
+
+  // Check required fields
+  if (!name || !species) {
+    return res.status(400).json({
+      message: 'Pet name and species are required.',
+    });
+  }
+
+  // Validate age if provided
+  if (age !== undefined && (!Number.isFinite(age) || age < 0)) {
+    return res.status(400).json({
+      message: 'Age must be a non-negative number.',
+    });
+  }
+
+  const pet = { name, species, age };
 
   res.status(201).json({
-    message: 'Pet data received successfully!',
-    pet: pet,
+    message: 'Pet created successfully!',
+    pet,
   });
 });
+
 
 
 app.listen(PORT, () => {
