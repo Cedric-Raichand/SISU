@@ -29,6 +29,13 @@ const userSchema = new mongoose.Schema(
       default: 'owner',
       required: true,
     },
+
+    vetApprovalStatus: {
+      type: String,
+      enum: ['not_applicable', 'pending', 'approved', 'rejected'],
+      default: 'not_applicable',
+      required: true,
+    },
   },
   {
     timestamps: true,
