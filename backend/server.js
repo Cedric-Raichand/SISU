@@ -62,6 +62,25 @@ app.post('/api/pets', async (req, res) => {
   }
 });
 
+app.get('/api/pets', async (req, res) => {
+  try {
+    const pets = await Pet.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      message: 'Pets retrieved successfully!',
+      count: pets.length,
+      pets,
+    });
+  } catch (error) {
+    console.error('Error retrieving pets:', error.message);
+
+    res.status(500).json({
+      message: 'Failed to retrieve pets.',
+    });
+  }
+});
+
+
 
 async function startServer() {
   if (!MONGODB_URI) {
