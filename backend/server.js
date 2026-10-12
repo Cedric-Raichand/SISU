@@ -3,6 +3,7 @@ require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
+const Pet = require('./models/Pet');
 
 const app = express();
 
@@ -15,28 +16,52 @@ app.get('/', (req, res) => {
   res.send('Welcome to the Sisu API!');
 });
 
-app.post('/api/pets', (req, res) => {
-  const { name, species, age } = req.body;
 
-  if (!name || !species) {
-    return res.status(400).json({
-      message: 'Pet name and species are required.',
+app.post('/api/pets', async (req, res) => {
+  try {
+    const { name, species, age } = req.body;
+
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      typeof species !== 'string' ||
+      !species.trim()
+    ) {
+      return res.status(400).json({
+        message: 'Pet name and species are required.',
+      });
+    }
+
+    if (
+      age !== undefined &&
+      (typeof age !== 'number' ||
+        !Number.isFinite(age) ||
+        age < 0)
+    ) {
+      return res.status(400).json({
+        message: 'Age must be a non-negative number.',
+      });
+    }
+
+    const pet = await Pet.create({
+      name: name.trim(),
+      species: species.trim(),
+      ...(age !== undefined ? { age } : {}),
+    });
+
+    res.status(201).json({
+      message: 'Pet created successfully!',
+      pet,
+    });
+  } catch (error) {
+    console.error('Error creating pet:', error.message);
+
+    res.status(500).json({
+      message: 'Failed to create pet.',
     });
   }
-
-  if (age !== undefined && (!Number.isFinite(age) || age < 0)) {
-    return res.status(400).json({
-      message: 'Age must be a non-negative number.',
-    });
-  }
-
-  const pet = { name, species, age };
-
-  res.status(201).json({
-    message: 'Pet created successfully!',
-    pet,
-  });
 });
+
 
 async function startServer() {
   if (!MONGODB_URI) {
