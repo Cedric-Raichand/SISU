@@ -7,6 +7,7 @@ const Pet = require('./models/Pet');
 const authRoutes = require('./routes/authRoutes');
 const { protect } = require('./middleware/authMiddleware');
 const { requireApprovedVet } = require('./middleware/vetMiddleware');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 
