@@ -21,9 +21,12 @@ const createAdmin = async () => {
       throw new Error('Admin password must be at least 12 characters.');
     }
 
-    await mongoose.connect(process.env.MONGODB_URI);
+  await mongoose.connect(process.env.MONGODB_URI);
 
-    const email = process.env.ADMIN_EMAIL.trim().toLowerCase();
+const email = process.env.ADMIN_EMAIL.trim().toLowerCase();
+
+console.log('Admin email loaded:', email);
+console.log('Database connected to:', mongoose.connection.name);
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {

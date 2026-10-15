@@ -1,0 +1,20 @@
+* [33mdce8ce0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Resolve merge conflicts
+* [33m0b2441a[m  created admin routes
+* [33mc344222[m creating an exclusive account for admin
+* [33m3fd7fc9[m added admin middleware
+* [33m7bc51bd[m added admin role
+* [33m68c9452[m added full vet completion of application
+* [33mb0fcb4e[m Add requireApprovedVet middleware and refresh user role in protect
+* [33m46ab941[m checks whether vet is approved or not to access the system
+* [33m13ab22f[m created vet role application to be approved
+* [33mf7357fc[m enforce access to vet role
+* [33m72a6da7[m enable deletion of pet by owner through authorization of pet ownership
+* [33m1a94df1[m enable editing of pet info by logged in owner
+* [33m65ee513[m return only pet by logged in owner
+* [33m0943d5f[m Creating a pet with an owner ID
+* [33mf50cb1d[m add JWT authentication middleware
+* [33mbee2bc0[m add JWT login authentication
+* [33m522a702[m add pet owner registration
+* [33m8a91b18[m setup foundation for password hashing
+* [33m86607f5[m add pet deletion endpoint
+* [33m5faf391[m update pet records
