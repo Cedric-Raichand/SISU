@@ -88,6 +88,13 @@ router.post('/login', async (req, res) => {
       email: email.trim().toLowerCase(),
     }).select('+password');
 
+    // TEMP DEBUG - remove after fixing login (never logs the password)
+    console.log('LOGIN DEBUG', {
+      found: Boolean(user),
+      emailTried: email.trim().toLowerCase(),
+      passwordLength: password.length,
+    });
+
     if (!user) {
       return res.status(401).json({
         message: 'Invalid email or password.',
@@ -98,6 +105,9 @@ router.post('/login', async (req, res) => {
       password,
       user.password
     );
+
+    // TEMP DEBUG - remove after fixing login
+    console.log('LOGIN DEBUG passwordMatches:', passwordMatches);
 
     if (!passwordMatches) {
       return res.status(401).json({
