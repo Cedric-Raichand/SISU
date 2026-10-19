@@ -8,6 +8,7 @@ const authRoutes = require('./routes/authRoutes');
 const { protect } = require('./middleware/authMiddleware');
 const { requireApprovedVet } = require('./middleware/vetMiddleware');
 const adminRoutes = require('./routes/adminRoutes');
+const vetPetAccessRoutes = require('./routes/vetPetAccessRoutes');
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/vet-access', vetPetAccessRoutes);
 
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
