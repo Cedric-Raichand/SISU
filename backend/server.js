@@ -10,6 +10,7 @@ const { requireApprovedVet } = require('./middleware/vetMiddleware');
 const adminRoutes = require('./routes/adminRoutes');
 const vetPetAccessRoutes = require('./routes/vetPetAccessRoutes');
 const ownerAccessRoutes = require('./routes/ownerAccessRoutes');
+const VetPetAccess = require('./models/VetPetAccess');
 
 const app = express();
 
@@ -76,11 +77,35 @@ app.post('/api/pets', protect, async (req, res) => {
 });
 
 
-app.get('/api/pets', async (req, res) => {
-  try {
-    const pets = await Pet.find().sort({ createdAt: -1 });
 
-    res.status(200).json({
+app.get('/api/pets', protect, async (req, res) => {
+  try {
+    let pets;
+
+    if (req.user.role === 'owner') {
+      // Owners can see only their own pets.
+      pets = await Pet.find({
+        owner: req.user.userId,
+      }).sort({ createdAt: -1 });
+    } else if (req.user.role === 'vet') {
+      // Vets can see only pets for which access was approved.
+      const approvedAccess = await VetPetAccess.find({
+        veterinarian: req.user.userId,
+        status: 'approved',
+      }).select('pet');
+
+      const petIds = approvedAccess.map((access) => access.pet);
+
+      pets = await Pet.find({
+        _id: { $in: petIds },
+      }).sort({ createdAt: -1 });
+    } else {
+      return res.status(403).json({
+        message: 'You are not authorized to view pets.',
+      });
+    }
+
+    return res.status(200).json({
       message: 'Pets retrieved successfully!',
       count: pets.length,
       pets,
@@ -88,11 +113,12 @@ app.get('/api/pets', async (req, res) => {
   } catch (error) {
     console.error('Error retrieving pets:', error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Failed to retrieve pets.',
     });
   }
 });
+
 
 
 app.get('/api/pets/:id', protect, async (req, res) => {
