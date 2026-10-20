@@ -121,22 +121,18 @@ app.get('/api/pets', protect, async (req, res) => {
 
 
 
+
 app.get('/api/pets/:id', protect, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate the pet ID
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({
         message: 'Invalid pet ID.',
       });
     }
 
-    // Find the pet only if it belongs to the logged-in owner
-    const pet = await Pet.findOne({
-      _id: id,
-      owner: req.user.userId,
-    });
+    const pet = await Pet.findById(id);
 
     if (!pet) {
       return res.status(404).json({
@@ -144,18 +140,47 @@ app.get('/api/pets/:id', protect, async (req, res) => {
       });
     }
 
-    res.status(200).json({
-      message: 'Pet retrieved successfully!',
-      pet,
+    // Owners can view their own pets.
+    const isOwner =
+      req.user.role === 'owner' &&
+      pet.owner.toString() === req.user.userId;
+
+    if (isOwner) {
+      return res.status(200).json({
+        message: 'Pet retrieved successfully!',
+        pet,
+      });
+    }
+
+    // Vets need an explicit, approved permission for this pet.
+    if (req.user.role === 'vet') {
+      const hasAccess = await VetPetAccess.exists({
+        owner: pet.owner,
+        veterinarian: req.user.userId,
+        pet: pet._id,
+        status: 'approved',
+      });
+
+      if (hasAccess) {
+        return res.status(200).json({
+          message: 'Pet retrieved successfully!',
+          pet,
+        });
+      }
+    }
+
+    return res.status(403).json({
+      message: 'You do not have permission to view this pet.',
     });
   } catch (error) {
     console.error('Error retrieving pet:', error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Failed to retrieve pet.',
     });
   }
 });
+
 
 
 app.patch('/api/pets/:id', protect, async (req, res) => {
