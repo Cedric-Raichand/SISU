@@ -90,4 +90,55 @@ router.patch('/requests/:requestId', protect, async (req, res) => {
   }
 });
 
+ // Revoke a veterinarian's approved access to a pet.
+router.patch('/pets/:petId/veterinarians/:vetId/revoke', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({
+        message: 'Only pet owners can revoke access.',
+      });
+    }
+
+    const { petId, vetId } = req.params;
+
+    if (
+      !mongoose.isValidObjectId(petId) ||
+      !mongoose.isValidObjectId(vetId)
+    ) {
+      return res.status(400).json({
+        message: 'Invalid pet or veterinarian ID.',
+      });
+    }
+
+    const access = await VetPetAccess.findOne({
+      owner: req.user.userId,
+      pet: petId,
+      veterinarian: vetId,
+      status: 'approved',
+    });
+
+    if (!access) {
+      return res.status(404).json({
+        message: 'Approved veterinarian access not found.',
+      });
+    }
+
+    access.status = 'revoked';
+    access.revokedAt = new Date();
+
+    await access.save();
+
+    return res.status(200).json({
+      message: 'Veterinarian access revoked successfully.',
+    });
+  } catch (error) {
+    console.error('Access revocation error:', error.message);
+
+    return res.status(500).json({
+      message: 'Unable to revoke veterinarian access.',
+    });
+  }
+});
+
+
 module.exports = router;
