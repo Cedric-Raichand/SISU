@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   View,
@@ -14,6 +13,10 @@ export default function AppInput({
   placeholder,
   keyboardType = 'default',
   multiline = false,
+  secureTextEntry = false,
+  autoCapitalize,
+  autoCorrect,
+  autoComplete,
 }) {
   return (
     <View style={styles.inputGroup}>
@@ -30,6 +33,10 @@ export default function AppInput({
         keyboardType={keyboardType}
         placeholderTextColor="#98A2B3"
         multiline={multiline}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        autoComplete={autoComplete}
         textAlignVertical={multiline ? 'top' : 'center'}
       />
     </View>
