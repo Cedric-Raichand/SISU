@@ -15,6 +15,7 @@ const HealthRecord = require('./models/HealthRecord');
 const Vaccination = require('./models/Vaccination');
 const petRecordRoutes = require('./routes/petRecordRoutes');
 const Appointment = require('./models/Appointment');
+const { parsePet } = require('./utils/petValidation');
 const {
   petAppointmentRouter,
   myAppointmentsRouter,
@@ -61,34 +62,14 @@ app.post('/api/pets', protect, async (req, res) => {
       });
     }
 
-    const { name, species, age } = req.body;
+    const { values, error } = parsePet(req.body || {}, { partial: false });
 
-    if (
-      typeof name !== 'string' ||
-      !name.trim() ||
-      typeof species !== 'string' ||
-      !species.trim()
-    ) {
-      return res.status(400).json({
-        message: 'Pet name and species are required.',
-      });
-    }
-
-    if (
-      age !== undefined &&
-      (typeof age !== 'number' ||
-        !Number.isFinite(age) ||
-        age < 0)
-    ) {
-      return res.status(400).json({
-        message: 'Age must be a non-negative number.',
-      });
+    if (error) {
+      return res.status(400).json({ message: error });
     }
 
     const pet = await Pet.create({
-      name: name.trim(),
-      species: species.trim(),
-      ...(age !== undefined ? { age } : {}),
+      ...values,
       owner: req.user.userId,
     });
 
@@ -104,7 +85,6 @@ app.post('/api/pets', protect, async (req, res) => {
     });
   }
 });
-
 
 
 app.get('/api/pets', protect, async (req, res) => {
@@ -215,56 +195,17 @@ app.get('/api/pets/:id', protect, async (req, res) => {
 app.patch('/api/pets/:id', protect, async (req, res) => {
   try {
     const petId = req.params.id;
-    const { name, species, age } = req.body;
 
-    // Check the pet ID
     if (!mongoose.isValidObjectId(petId)) {
       return res.status(400).json({
         message: 'Invalid pet ID.',
       });
     }
 
-    // Only allow these fields to be updated
-    const updates = {};
+    const { values, error } = parsePet(req.body || {}, { partial: true });
 
-    if (name !== undefined) {
-      if (typeof name !== 'string' || !name.trim()) {
-        return res.status(400).json({
-          message: 'Name must be a non-empty string.',
-        });
-      }
-
-      updates.name = name.trim();
-    }
-
-    if (species !== undefined) {
-      if (typeof species !== 'string' || !species.trim()) {
-        return res.status(400).json({
-          message: 'Species must be a non-empty string.',
-        });
-      }
-
-      updates.species = species.trim();
-    }
-
-    if (age !== undefined) {
-      if (
-        typeof age !== 'number' ||
-        !Number.isFinite(age) ||
-        age < 0
-      ) {
-        return res.status(400).json({
-          message: 'Age must be a non-negative number.',
-        });
-      }
-
-      updates.age = age;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({
-        message: 'Provide at least one valid field to update.',
-      });
+    if (error) {
+      return res.status(400).json({ message: error });
     }
 
     // Update only a pet owned by the logged-in user
@@ -273,7 +214,7 @@ app.patch('/api/pets/:id', protect, async (req, res) => {
         _id: petId,
         owner: req.user.userId,
       },
-      { $set: updates },
+      { $set: values },
       {
         new: true,
         runValidators: true,
