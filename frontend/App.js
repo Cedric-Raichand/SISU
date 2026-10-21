@@ -24,6 +24,9 @@ import AppHeader from './src/components/common/AppHeader';
 import LoadingIndicator from './src/components/common/LoadingIndicator';
 import VaccinationCard from './src/components/health/VaccinationCard';
 import * as Location from 'expo-location';
+import useSession from './src/hooks/useSession';
+import AuthScreen from './src/components/auth/AuthScreen';
+import RoleHomeScreen from './src/components/auth/RoleHomeScreen';
 import {
   scheduleVaccinationReminder,
   cancelVaccinationReminder,
@@ -358,7 +361,8 @@ function normalizePet(pet) {
   };
 }
 
-export default function App() {
+// The pet-owner app. It only mounts after the user has signed in.
+function MainApp({ user, onSignOut }) {
   const [screen, setScreen] = useState('home');
   const [clinics, setClinics] = useState([]);
 const [clinicLoading, setClinicLoading] = useState(false);
@@ -2592,6 +2596,15 @@ async function openClinicDirections(clinic) {
     );
   }
 
+  function handleSignOut() {
+    confirmAction({
+      title: 'Sign out?',
+      message: 'You will need to sign in again to use Sisu.',
+      confirmLabel: 'Sign out',
+      onConfirm: onSignOut,
+    });
+  }
+
   function renderSettings() {
     const totalRecords = pets.reduce(
       (total, pet) => total + pet.healthRecords.length,
@@ -2605,6 +2618,17 @@ async function openClinicDirections(clinic) {
     return (
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader('Settings', 'Manage your Sisu data and app info.')}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.summaryText}>
+            Signed in as {user.name || user.email}
+          </Text>
+          {user.name && user.email ? (
+            <Text style={styles.helperText}>{user.email}</Text>
+          ) : null}
+          {renderButton('Sign out', handleSignOut, 'secondary')}
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Your data</Text>
@@ -3088,3 +3112,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+
+// Decides what to show: a loading screen while the saved login is checked,
+// the sign-in screen, a simple screen for vets and admins, or the owner app.
+export default function App() {
+  const session = useSession();
+
+  if (session.status === 'loading') {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <StatusBar barStyle="dark-content" />
+        <LoadingIndicator />
+      </SafeAreaView>
+    );
+  }
+
+  if (session.status === 'signedOut') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
+        <AuthScreen
+          onSignIn={session.signIn}
+          onSignUp={session.signUp}
+          onApplyAsVet={session.applyAsVet}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (session.user.role !== 'owner') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
+        <RoleHomeScreen user={session.user} onSignOut={session.signOut} />
+      </SafeAreaView>
+    );
+  }
+
+  return <MainApp user={session.user} onSignOut={session.signOut} />;
+}
