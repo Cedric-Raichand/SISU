@@ -10,6 +10,9 @@ const adminRoutes = require('./routes/adminRoutes');
 const vetPetAccessRoutes = require('./routes/vetPetAccessRoutes');
 const ownerAccessRoutes = require('./routes/ownerAccessRoutes');
 const VetPetAccess = require('./models/VetPetAccess');
+const HealthRecord = require('./models/HealthRecord');
+const Vaccination = require('./models/Vaccination');
+const petRecordRoutes = require('./routes/petRecordRoutes');
 
 const app = express();
 
@@ -19,6 +22,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/vet-access', vetPetAccessRoutes);
 app.use('/api/owner-access', ownerAccessRoutes);
+app.use('/api/pets/:petId', petRecordRoutes);
 
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -300,8 +304,10 @@ app.delete('/api/pets/:id', protect, async (req, res) => {
       });
     }
 
-    // Remove veterinarian access records for the deleted pet.
+    // Remove access records and medical records for the deleted pet.
     await VetPetAccess.deleteMany({ pet: pet._id });
+    await HealthRecord.deleteMany({ pet: pet._id });
+    await Vaccination.deleteMany({ pet: pet._id });
 
     res.status(200).json({
       message: 'Pet deleted successfully!',
