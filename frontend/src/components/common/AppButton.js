@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Pressable,
@@ -11,16 +10,20 @@ export default function AppButton({
   onPress,
   variant = 'primary',
   style,
+  disabled = false,
 }) {
   const isSecondary = variant === 'secondary';
 
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
+      accessibilityState={{ disabled }}
       style={[
         styles.button,
         isSecondary && styles.secondaryButton,
         variant === 'danger' && styles.dangerButton,
+        disabled && styles.disabledButton,
         style,
       ]}
     >
@@ -63,5 +66,8 @@ const styles = StyleSheet.create({
   },
   dangerButton: {
     backgroundColor: '#B42318',
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
 });
