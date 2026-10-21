@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 
 const express = require('express');
@@ -32,6 +31,12 @@ app.get('/', (req, res) => {
 
 app.post('/api/pets', protect, async (req, res) => {
   try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({
+        message: 'Only pet owners can create pets.',
+      });
+    }
+
     const { name, species, age } = req.body;
 
     if (
@@ -294,6 +299,9 @@ app.delete('/api/pets/:id', protect, async (req, res) => {
         message: 'Pet not found.',
       });
     }
+
+    // Remove veterinarian access records for the deleted pet.
+    await VetPetAccess.deleteMany({ pet: pet._id });
 
     res.status(200).json({
       message: 'Pet deleted successfully!',
