@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const cors = require('cors');
 const mongoose = require('mongoose');
 const Pet = require('./models/Pet');
 const authRoutes = require('./routes/authRoutes');
@@ -20,6 +21,18 @@ const {
 } = require('./routes/appointmentRoutes');
 
 const app = express();
+
+// The web version of the app runs on a different port than the API, so the
+// browser needs CORS headers. Authentication uses a bearer token (no cookies),
+// so allowing any origin is fine while developing. In production, set
+// CORS_ORIGIN to a comma-separated list of allowed sites.
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+      : true,
+  })
+);
 
 app.use(express.json());
 
