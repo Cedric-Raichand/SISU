@@ -1,4 +1,3 @@
-
 const express = require('express');
 const mongoose = require('mongoose');
 
@@ -90,7 +89,52 @@ router.patch('/requests/:requestId', protect, async (req, res) => {
   }
 });
 
- // Revoke a veterinarian's approved access to a pet.
+// List veterinarians who currently have approved access to one of the
+// owner's pets (the owner needs their IDs in order to revoke access).
+router.get('/pets/:petId/veterinarians', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({
+        message: 'Only pet owners can view veterinarian access.',
+      });
+    }
+
+    const { petId } = req.params;
+
+    if (!mongoose.isValidObjectId(petId)) {
+      return res.status(400).json({
+        message: 'Invalid pet ID.',
+      });
+    }
+
+    const accessRecords = await VetPetAccess.find({
+      owner: req.user.userId,
+      pet: petId,
+      status: 'approved',
+    })
+      .populate('veterinarian', 'name email')
+      .sort({ approvedAt: -1 });
+
+    return res.status(200).json({
+      veterinarians: accessRecords
+        .filter((record) => record.veterinarian)
+        .map((record) => ({
+        id: record.veterinarian._id,
+        name: record.veterinarian.name,
+        email: record.veterinarian.email,
+        approvedAt: record.approvedAt,
+      })),
+    });
+  } catch (error) {
+    console.error('Access list error:', error.message);
+
+    return res.status(500).json({
+      message: 'Unable to retrieve veterinarians for this pet.',
+    });
+  }
+});
+
+// Revoke a veterinarian's approved access to a pet.
 router.patch('/pets/:petId/veterinarians/:vetId/revoke', protect, async (req, res) => {
   try {
     if (req.user.role !== 'owner') {
