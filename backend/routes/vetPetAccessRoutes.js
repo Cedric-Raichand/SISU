@@ -1,4 +1,3 @@
-
 const express = require('express');
 const mongoose = require('mongoose');
 
@@ -65,13 +64,8 @@ router.post('/pets/:petId/request', protect, requireApprovedVet, async (req, res
         });
       }
 
-      if (existingAccess.status === 'revoked') {
-        return res.status(403).json({
-          message: 'Your access was revoked by the owner. Contact the owner to request access again.',
-        });
-      }
-
-      // A rejected request may be submitted again.
+      // A rejected or revoked request may be submitted again.
+      // The owner must still approve it before any access is granted.
       existingAccess.status = 'pending';
       existingAccess.requestedAt = new Date();
       existingAccess.approvedAt = null;
