@@ -27,6 +27,7 @@ import * as dataApi from './src/services/dataApi';
 import useSession from './src/hooks/useSession';
 import AuthScreen from './src/components/auth/AuthScreen';
 import RoleHomeScreen from './src/components/auth/RoleHomeScreen';
+import VetAccessScreen from './src/components/access/VetAccessScreen';
 import {
   scheduleVaccinationReminder,
   cancelVaccinationReminder,
@@ -101,6 +102,7 @@ function getActiveTab(screen) {
     case 'reminders':
       return 'reminders';
     case 'settings':
+    case 'vetAccess':
       return 'settings';
     default:
       // pets, profile, healthRecords, vaccinations, etc.
@@ -1616,6 +1618,12 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
           )}
 
           {renderButton(
+            '🩺 Veterinarian Access',
+            () => setScreen('vetAccess'),
+            'secondary'
+          )}
+
+          {renderButton(
             '✏️ Edit Pet Profile',
             () => openEditPet(selectedPet),
             'secondary'
@@ -2775,6 +2783,18 @@ async function openClinicDirections(clinic) {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Privacy</Text>
+          <Text style={styles.helperText}>
+            Choose which veterinarians can see and add to your pets' records.
+          </Text>
+          {renderButton(
+            '🩺 Veterinarian access',
+            () => setScreen('vetAccess'),
+            'secondary'
+          )}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Your data</Text>
           <Text style={styles.summaryText}>Pets: {pets.length}</Text>
           <Text style={styles.summaryText}>
@@ -2917,6 +2937,16 @@ async function openClinicDirections(clinic) {
 
     case 'settings':
       content = renderSettings();
+      break;
+
+    case 'vetAccess':
+      content = (
+        <VetAccessScreen
+          pets={pets}
+          confirm={confirmAction}
+          notify={notify}
+        />
+      );
       break;
 
     case 'veterinarians':
