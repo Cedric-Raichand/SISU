@@ -29,11 +29,15 @@ const app = express();
 // browser needs CORS headers. Authentication uses a bearer token (no cookies),
 // so allowing any origin is fine while developing. In production, set
 // CORS_ORIGIN to a comma-separated list of allowed sites.
+// Phones do not use CORS, so in production only the sites listed in
+// CORS_ORIGIN (if any) are allowed. In development any site is allowed.
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+  : null;
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN
-      ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
-      : true,
+    origin: allowedOrigins || process.env.NODE_ENV !== 'production',
   })
 );
 
@@ -64,6 +68,12 @@ const MONGODB_URI = process.env.MONGODB_URI;
 
 app.get('/', (req, res) => {
   res.send('Welcome to the Sisu API!');
+});
+
+// Used by hosting platforms to check that the server is up. It does not
+// touch the database, so it stays fast and reveals nothing.
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
 
@@ -357,13 +367,32 @@ async function startServer() {
   }
 
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 15000,
+    });
 
     console.log('Connected to MongoDB successfully!');
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Sisu server is running on port ${PORT}`);
     });
+
+    // Hosting platforms stop the server with SIGTERM when they redeploy.
+    // Finish current requests and close the database cleanly.
+    const shutdown = (signal) => {
+      console.log(`${signal} received. Shutting down...`);
+
+      server.close(async () => {
+        await mongoose.disconnect().catch(() => {});
+        process.exit(0);
+      });
+
+      // Do not hang forever if a connection stays open.
+      setTimeout(() => process.exit(0), 10000).unref();
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (error) {
     console.error('MongoDB connection failed:', error.message);
     process.exit(1);
