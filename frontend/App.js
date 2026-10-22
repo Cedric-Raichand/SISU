@@ -28,6 +28,7 @@ import useSession from './src/hooks/useSession';
 import AuthScreen from './src/components/auth/AuthScreen';
 import RoleHomeScreen from './src/components/auth/RoleHomeScreen';
 import VetAccessScreen from './src/components/access/VetAccessScreen';
+import VetApp from './src/components/vet/VetApp';
 import {
   scheduleVaccinationReminder,
   cancelVaccinationReminder,
@@ -3331,11 +3332,34 @@ export default function App() {
     );
   }
 
+  // Approved veterinarians get their own app.
+  if (
+    session.user.role === 'vet' &&
+    session.user.vetApprovalStatus === 'approved'
+  ) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
+        <VetApp
+          user={session.user}
+          onSignOut={session.signOut}
+          confirm={confirmAction}
+          notify={notify}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // Pending or rejected vets, and administrators, see a status screen.
   if (session.user.role !== 'owner') {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
-        <RoleHomeScreen user={session.user} onSignOut={session.signOut} />
+        <RoleHomeScreen
+          user={session.user}
+          onSignOut={session.signOut}
+          onRefresh={session.refreshAccount}
+        />
       </SafeAreaView>
     );
   }
