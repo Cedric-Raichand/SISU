@@ -39,7 +39,7 @@ async function writeJson(key, value) {
   }
 }
 
-function isValidDate(value) {
+export function isValidDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
@@ -142,6 +142,8 @@ function toAppRecord(record) {
     medication: record.medication || '',
     veterinarian: record.veterinarian || '',
     notes: record.notes || '',
+    recordedBy: record.recordedBy ? String(record.recordedBy) : '',
+    recordedByRole: record.recordedByRole || '',
   };
 }
 
@@ -154,6 +156,8 @@ function toAppVaccination(vaccination, notificationIds) {
     veterinarian: vaccination.veterinarian || '',
     notes: vaccination.notes || '',
     notificationId: notificationIds[vaccination._id] || null,
+    recordedBy: vaccination.recordedBy ? String(vaccination.recordedBy) : '',
+    recordedByRole: vaccination.recordedByRole || '',
   };
 }
 
@@ -634,5 +638,34 @@ export async function revokeVeterinarianAccess(petId, vetId) {
   await request(
     `/api/owner-access/pets/${petId}/veterinarians/${vetId}/revoke`,
     { method: 'PATCH' }
+  );
+}
+
+// ----- veterinarian side ---------------------------------------------------
+
+// The vet's own access requests: [{ id, petId, petName (once approved),
+// status: 'pending' | 'approved' | 'rejected' | 'revoked' }]
+export async function loadMyAccessRequests() {
+  const { requests } = await request('/api/vet-access/requests');
+
+  return requests.map((item) => ({
+    id: item.id,
+    petId: item.petId,
+    petName: item.petName || '',
+    status: item.status,
+    requestedAt: item.requestedAt || '',
+  }));
+}
+
+export async function requestPetAccess(petId) {
+  await request(`/api/vet-access/pets/${petId}/request`, { method: 'POST' });
+}
+
+// Appointments for one pet (read-only for vets).
+export async function loadPetAppointments(petId, petName) {
+  const { appointments } = await request(`/api/pets/${petId}/appointments`);
+
+  return appointments.map((item) =>
+    toAppAppointment(item, { [petId]: petName }, {})
   );
 }
