@@ -29,6 +29,7 @@ import AuthScreen from './src/components/auth/AuthScreen';
 import RoleHomeScreen from './src/components/auth/RoleHomeScreen';
 import VetAccessScreen from './src/components/access/VetAccessScreen';
 import VetApp from './src/components/vet/VetApp';
+import AdminApp from './src/components/admin/AdminApp';
 import {
   scheduleVaccinationReminder,
   cancelVaccinationReminder,
@@ -3350,7 +3351,22 @@ export default function App() {
     );
   }
 
-  // Pending or rejected vets, and administrators, see a status screen.
+  // Administrators review veterinarian applications.
+  if (session.user.role === 'admin') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
+        <AdminApp
+          user={session.user}
+          onSignOut={session.signOut}
+          confirm={confirmAction}
+          notify={notify}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // Pending or rejected vets see a status screen.
   if (session.user.role !== 'owner') {
     return (
       <SafeAreaView style={styles.safeArea}>
