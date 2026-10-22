@@ -1,0 +1,20 @@
+# Render Blueprint: deploys the Sisu API from the backend/ folder.
+# Render dashboard -> New -> Blueprint -> pick this repository.
+services:
+  - type: web
+    name: sisu-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    plan: free        # change to "starter" for an always-on server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: MONGODB_URI
+        sync: false   # you enter this in the Render dashboard
+      - key: JWT_SECRET
+        generateValue: true   # Render creates a long random value for you
