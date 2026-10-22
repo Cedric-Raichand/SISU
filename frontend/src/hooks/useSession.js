@@ -3,6 +3,7 @@ import * as api from '../services/api';
 import {
   getToken,
   saveToken,
+  saveRefreshToken,
   getSavedUser,
   saveUser,
   clearSession,
@@ -16,6 +17,8 @@ export default function useSession() {
 
   const signOut = useCallback(async () => {
     signedInRef.current = false;
+    // Revoke the session on the server first (best effort), then forget it.
+    await api.logout();
     await clearSession();
     setUser(null);
     setStatus('signedOut');
@@ -96,6 +99,10 @@ export default function useSession() {
     const data = await api.login(email, password);
 
     await saveToken(data.token);
+
+    if (data.refreshToken) {
+      await saveRefreshToken(data.refreshToken);
+    }
 
     try {
       const account = await loadAccount(data.user);
