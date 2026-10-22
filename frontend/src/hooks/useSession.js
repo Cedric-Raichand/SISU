@@ -111,6 +111,18 @@ export default function useSession() {
     }
   }
 
+  // Re-reads the account from the server, e.g. to see whether a veterinarian
+  // application has been approved.
+  async function refreshAccount() {
+    const account = await loadAccount(user);
+    const merged = { ...user, ...account };
+
+    await saveUser(merged);
+    setUser(merged);
+
+    return merged;
+  }
+
   async function signUp(name, email, password) {
     await api.register(name, email, password);
     await signIn(email, password);
@@ -123,5 +135,5 @@ export default function useSession() {
     return data.message;
   }
 
-  return { status, user, signIn, signUp, applyAsVet, signOut };
+  return { status, user, signIn, signUp, applyAsVet, signOut, refreshAccount };
 }
