@@ -17,7 +17,7 @@ export function setUnauthorizedHandler(handler) {
   unauthorizedHandler = handler;
 }
 
-async function request(path, { method = 'GET', body, auth = true } = {}) {
+export async function request(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { Accept: 'application/json' };
 
   if (body !== undefined) {
