@@ -589,3 +589,50 @@ export async function importLegacyData() {
 
   return summary;
 }
+
+// ----- veterinarian access (owner side) ------------------------------------
+
+// Pending requests from veterinarians, across all of the owner's pets.
+export async function loadAccessRequests() {
+  const { requests } = await request('/api/owner-access/requests');
+
+  return requests
+    .filter((item) => item.pet && item.veterinarian)
+    .map((item) => ({
+      id: item._id,
+      petId: item.pet._id,
+      petName: item.pet.name || 'Pet',
+      vetName: item.veterinarian.name || 'Veterinarian',
+      vetEmail: item.veterinarian.email || '',
+      requestedAt: item.requestedAt || item.createdAt || '',
+    }));
+}
+
+// status: 'approved' or 'rejected'
+export async function respondToAccessRequest(requestId, status) {
+  await request(`/api/owner-access/requests/${requestId}`, {
+    method: 'PATCH',
+    body: { status },
+  });
+}
+
+// Veterinarians who currently have access to one pet.
+export async function loadPetVeterinarians(petId) {
+  const { veterinarians } = await request(
+    `/api/owner-access/pets/${petId}/veterinarians`
+  );
+
+  return veterinarians.map((vet) => ({
+    id: vet.id,
+    name: vet.name || 'Veterinarian',
+    email: vet.email || '',
+    approvedAt: vet.approvedAt || '',
+  }));
+}
+
+export async function revokeVeterinarianAccess(petId, vetId) {
+  await request(
+    `/api/owner-access/pets/${petId}/veterinarians/${vetId}/revoke`,
+    { method: 'PATCH' }
+  );
+}
