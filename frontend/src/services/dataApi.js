@@ -669,3 +669,25 @@ export async function loadPetAppointments(petId, petName) {
     toAppAppointment(item, { [petId]: petName }, {})
   );
 }
+
+// ----- administrator side --------------------------------------------------
+
+// Veterinarian applications waiting for a decision.
+export async function loadPendingVeterinarians() {
+  const { veterinarians } = await request('/api/admin/veterinarians/pending');
+
+  return veterinarians.map((vet) => ({
+    id: vet._id,
+    name: vet.name || 'Unnamed',
+    email: vet.email || '',
+    appliedAt: vet.createdAt || '',
+  }));
+}
+
+// status: 'approved' or 'rejected'
+export async function decideVeterinarian(vetId, status) {
+  await request(`/api/admin/veterinarians/${vetId}/approval`, {
+    method: 'PATCH',
+    body: { status },
+  });
+}
