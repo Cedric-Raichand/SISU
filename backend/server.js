@@ -2,6 +2,8 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const { apiLimiter } = require('./middleware/rateLimiters');
 const mongoose = require('mongoose');
 const Pet = require('./models/Pet');
 const authRoutes = require('./routes/authRoutes');
@@ -35,7 +37,19 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Standard security headers (also removes the X-Powered-By header).
+app.use(helmet());
+
+// When the API runs behind a proxy or load balancer (most hosts), set
+// TRUST_PROXY=1 so rate limits use each visitor's real IP address.
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+}
+
+app.use('/api', apiLimiter);
+
+// Requests are small JSON documents; refuse anything large.
+app.use(express.json({ limit: '100kb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -303,10 +317,43 @@ app.get(
 );
 
 
+// Last stop for errors that happen before a route runs (such as unreadable or
+// oversized JSON). Answers in JSON and never leaks a stack trace.
+app.use((error, req, res, next) => {
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request is too large.' });
+  }
+
+  if (error.type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'Request body is not valid JSON.' });
+  }
+
+  console.error('Unexpected error:', error.message);
+
+  return res.status(500).json({ message: 'Something went wrong.' });
+});
+
 async function startServer() {
   if (!MONGODB_URI) {
     console.error('MONGODB_URI is missing from the .env file.');
     process.exit(1);
+  }
+
+  // Tokens are only as safe as the secret that signs them.
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    const problem =
+      'JWT_SECRET should be a random string of at least 32 characters.';
+
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`${problem} Refusing to start in production.`);
+      process.exit(1);
+    }
+
+    console.warn(`Warning: ${problem}`);
   }
 
   try {
