@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import AppHeader from '../common/AppHeader';
 import AppButton from '../common/AppButton';
@@ -30,8 +30,24 @@ function getMessage(user) {
   }
 }
 
-export default function RoleHomeScreen({ user, onSignOut }) {
+export default function RoleHomeScreen({ user, onSignOut, onRefresh }) {
   const message = getMessage(user);
+  const [checking, setChecking] = useState(false);
+  const [note, setNote] = useState('');
+
+  async function checkStatus() {
+    setChecking(true);
+    setNote('');
+
+    try {
+      await onRefresh();
+      setNote('Status updated.');
+    } catch (error) {
+      setNote(error.message || 'Could not check your status.');
+    } finally {
+      setChecking(false);
+    }
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -43,6 +59,16 @@ export default function RoleHomeScreen({ user, onSignOut }) {
       <View style={styles.card}>
         <Text style={styles.body}>{message.body}</Text>
       </View>
+
+      {note ? <Text style={styles.note}>{note}</Text> : null}
+
+      {user.role === 'vet' && onRefresh ? (
+        <AppButton
+          label={checking ? 'Checking...' : 'Check my status'}
+          onPress={checkStatus}
+          disabled={checking}
+        />
+      ) : null}
 
       <AppButton label="Sign out" onPress={onSignOut} variant="secondary" />
     </ScrollView>
@@ -61,6 +87,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#E4E7EC',
+    marginBottom: 6,
+  },
+  note: {
+    color: '#667085',
+    fontSize: 13,
     marginBottom: 6,
   },
   body: {
