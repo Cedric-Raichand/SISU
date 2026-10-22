@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -12,7 +12,6 @@ import {
   TextInput,
   Platform,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeatureCard from './src/components/common/FeatureCard';
 import ProfileDetail from './src/components/pets/ProfileDetail';
 import RecordDetail from './src/components/health/RecordDetail';
@@ -24,6 +23,7 @@ import AppHeader from './src/components/common/AppHeader';
 import LoadingIndicator from './src/components/common/LoadingIndicator';
 import VaccinationCard from './src/components/health/VaccinationCard';
 import * as Location from 'expo-location';
+import * as dataApi from './src/services/dataApi';
 import useSession from './src/hooks/useSession';
 import AuthScreen from './src/components/auth/AuthScreen';
 import RoleHomeScreen from './src/components/auth/RoleHomeScreen';
@@ -37,26 +37,6 @@ import {
   cancelAppointmentReminder,
   cancelAppointmentReminders,
 } from './src/services/vaccinationNotifications';
-
-const STORAGE_KEY = 'sisu_pets';
-
-const APPOINTMENTS_STORAGE_KEY = 'sisu_appointments';
-
-const INITIAL_PETS = [
-  {
-    id: 'pet-buddy',
-    name: 'Buddy',
-    species: 'Dog',
-    breed: 'Golden Retriever',
-    age: '2',
-    dateOfBirth: '',
-    sex: 'Unknown',
-    weight: '',
-    color: '',
-    healthRecords: [],
-    vaccinations: [],
-  },
-];
 
 const EMPTY_PET_FORM = {
   name: '',
@@ -130,6 +110,20 @@ function getActiveTab(screen) {
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// Shows a message. Alert.alert does nothing useful on the web, so use
+// the browser's own alert there.
+function notify(title, message) {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') {
+      window.alert(`${title}\n\n${message}`);
+    }
+
+    return;
+  }
+
+  Alert.alert(title, message);
 }
 
 function getTodayString() {
@@ -393,106 +387,172 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   const [editingAppointmentId, setEditingAppointmentId] =
     useState(null);
 
-  useEffect(() => {
-    loadPets();
-    loadAppointments();
-  }, []);
+  const [loadError, setLoadError] = useState('');
+  const [legacyCounts, setLegacyCounts] = useState({ total: 0 });
 
-  useEffect(() => {
-    if (!petsLoaded) {
+  // Stops a second tap from sending the same save twice.
+  const savingRef = useRef(false);
+
+  async function runGuarded(action) {
+    if (savingRef.current) {
       return;
     }
 
-    savePets();
-  }, [pets, petsLoaded]);
+    savingRef.current = true;
 
-  async function loadPets() {
     try {
-      const storedPets = await AsyncStorage.getItem(STORAGE_KEY);
-      let petsToLoad;
+      await action();
+    } finally {
+      savingRef.current = false;
+    }
+  }
 
-      if (storedPets) {
-        const parsedPets = JSON.parse(storedPets);
+  useEffect(() => {
+    loadAll();
+  }, []);
 
-        petsToLoad = Array.isArray(parsedPets)
-          ? parsedPets.map(normalizePet)
-          : INITIAL_PETS.map(normalizePet);
-      } else {
-        petsToLoad = INITIAL_PETS.map(normalizePet);
-      }
+  // Loads pets, records, vaccinations and appointments from the server.
+  async function loadAll() {
+    setLoadError('');
+
+    try {
+      const loadedPets = await dataApi.loadPets();
 
       // Repair missing, outdated, or duplicate vaccination reminders.
       // This does not request notification permission on app launch.
       const synchronizedPets =
-        await reconcileVaccinationReminders(petsToLoad);
+        await reconcileVaccinationReminders(loadedPets);
+
+      await dataApi.rememberVaccinationNotificationIds(synchronizedPets);
+
+      const loadedAppointments = await dataApi.loadAppointments(
+        synchronizedPets
+      );
+
+      await rescheduleMissingAppointmentReminders(loadedAppointments);
 
       setPets(synchronizedPets);
+      setAppointments(loadedAppointments.sort(compareAppointments));
+      setPetsLoaded(true);
+
+      offerLocalDataImport();
     } catch (error) {
-      console.error('Could not load pets:', error);
-      Alert.alert(
-        'Loading error',
-        'We could not load your saved pets.'
+      console.error('Could not load data:', error);
+      setLoadError(
+        error.message || 'We could not load your data. Please try again.'
       );
-      setPets(INITIAL_PETS.map(normalizePet));
-    } finally {
       setPetsLoaded(true);
     }
   }
 
-  async function savePets() {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(pets));
-    } catch (error) {
-      console.error('Could not save pets:', error);
-      Alert.alert(
-        'Saving error',
-        'Your changes could not be saved locally.'
-      );
-    }
-  }
+  // Local reminders live on this phone only. After signing in again (or on a
+  // new phone) upcoming appointments may have no reminder, so schedule one.
+  async function rescheduleMissingAppointmentReminders(list) {
+    for (const item of list) {
+      const when = getAppointmentDateTime(item);
 
-  async function loadAppointments() {
-    try {
-      const storedAppointments = await AsyncStorage.getItem(
-        APPOINTMENTS_STORAGE_KEY
-      );
+      if (
+        item.status !== 'Scheduled' ||
+        item.notificationId ||
+        !when ||
+        when.getTime() <= Date.now()
+      ) {
+        continue;
+      }
 
-      if (storedAppointments) {
-        const parsedAppointments = JSON.parse(storedAppointments);
+      try {
+        const notificationId = await scheduleAppointmentReminder({
+          appointmentId: item.id,
+          petName: item.petName,
+          clinicName: item.clinicName,
+          date: item.date,
+          time24: item.time24,
+        });
 
-        if (Array.isArray(parsedAppointments)) {
-          setAppointments(
-            parsedAppointments
-              .map(normalizeAppointment)
-              .sort(compareAppointments)
+        if (notificationId) {
+          item.notificationId = notificationId;
+          await dataApi.rememberNotificationId(
+            'appointment',
+            item.id,
+            notificationId
           );
         }
+      } catch (error) {
+        console.error('Could not schedule appointment reminder:', error);
       }
-    } catch (error) {
-      console.error('Could not load appointments:', error);
     }
   }
 
-  // Returns true if the appointments were saved.
-  async function saveAppointments(updatedAppointments) {
+  function retryLoad() {
+    setPetsLoaded(false);
+    loadAll();
+  }
+
+  // Data saved on this phone by earlier versions of the app can be moved
+  // into the account once.
+  async function offerLocalDataImport() {
     try {
-      await AsyncStorage.setItem(
-        APPOINTMENTS_STORAGE_KEY,
-        JSON.stringify(updatedAppointments)
-      );
+      const counts = await dataApi.countLegacyData();
 
-      setAppointments(updatedAppointments);
-      return true;
+      setLegacyCounts(counts);
+
+      if (counts.total > 0) {
+        confirmAction({
+          title: 'Move your saved data?',
+          message: `Sisu found ${counts.pets} pet(s) and ${counts.appointments} appointment(s) saved on this phone. Move them to your account?`,
+          confirmLabel: 'Move to my account',
+          cancelLabel: 'Not now',
+          onConfirm: importLocalData,
+        });
+      }
     } catch (error) {
-      console.error('Could not save appointments:', error);
-
-      Alert.alert(
-        'Saving failed',
-        'Your appointment could not be saved. Please try again.'
-      );
-
-      return false;
+      console.error('Could not check for local data:', error);
     }
+  }
+
+  async function importLocalData() {
+    await runGuarded(async () => {
+      try {
+        const summary = await dataApi.importLegacyData();
+
+        // Reminders for the old local appointments are replaced below.
+        await cancelAppointmentReminders(
+          summary.oldAppointmentReminderIds.map((id) => ({
+            notificationId: id,
+          }))
+        );
+
+        const loadedPets = await dataApi.loadPets();
+        const synchronizedPets =
+          await reconcileVaccinationReminders(loadedPets);
+
+        await dataApi.rememberVaccinationNotificationIds(synchronizedPets);
+
+        const loadedAppointments = (
+          await dataApi.loadAppointments(synchronizedPets)
+        ).sort(compareAppointments);
+
+        // Give the moved upcoming appointments their reminders again.
+        await rescheduleMissingAppointmentReminders(loadedAppointments);
+
+        setPets(synchronizedPets);
+        setAppointments(loadedAppointments);
+        setLegacyCounts(await dataApi.countLegacyData());
+
+        notify(
+          'Data moved',
+          `Moved ${summary.pets} pet(s), ${summary.records} health record(s), ${summary.vaccinations} vaccination(s) and ${summary.appointments} appointment(s).` +
+            (summary.skipped
+              ? ` ${summary.skipped} item(s) could not be moved because their data was invalid.`
+              : '')
+        );
+      } catch (error) {
+        notify(
+          'Could not move your data',
+          `${error.message} Nothing was lost; you can try again from Settings.`
+        );
+      }
+    });
   }
 
   function updateAppointmentForm(field, value) {
@@ -525,7 +585,11 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   // Creates a new appointment, or saves changes when editing one.
-  async function bookAppointment() {
+  function bookAppointment() {
+    return runGuarded(performBookAppointment);
+  }
+
+  async function performBookAppointment() {
     const existing = editingAppointmentId
       ? appointments.find((item) => item.id === editingAppointmentId)
       : null;
@@ -602,11 +666,41 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       return;
     }
 
-    const appointmentId = existing ? existing.id : createId();
+    // Save on the server first: its ID is needed for the reminder.
+    let saved;
+
+    try {
+      saved = await dataApi.saveAppointment(
+        pet.id,
+        existing && existing.petId === pet.id ? existing.id : null,
+        {
+          clinicName,
+          date,
+          time24: parsedTime.time24,
+          reason,
+        },
+        pet.name
+      );
+
+      // Changing the pet creates the visit under the new pet.
+      if (existing && existing.petId !== pet.id) {
+        try {
+          await dataApi.deleteAppointment(existing);
+        } catch (deleteError) {
+          console.error('Could not remove the old appointment:', deleteError);
+        }
+      }
+    } catch (error) {
+      notify('Could not save appointment', error.message);
+      return;
+    }
+
+    const appointmentId = saved.id;
     const oldNotificationId = existing?.notificationId || null;
 
     const scheduleUnchanged =
       Boolean(existing) &&
+      existing.id === appointmentId &&
       existing.date === date &&
       existing.time24 === parsedTime.time24;
 
@@ -631,42 +725,32 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       newNotificationId = oldNotificationId;
     }
 
-    const appointment = {
-      id: appointmentId,
-      petId: pet.id,
-      petName: pet.name,
-      clinicName,
-      date,
-      time: parsedTime.display,
-      time24: parsedTime.time24,
-      reason,
-      status: 'Scheduled',
-      notificationId: newNotificationId,
-    };
-
-    const updatedAppointments = (
-      existing
-        ? appointments.map((item) =>
-            item.id === appointmentId ? appointment : item
-          )
-        : [...appointments, appointment]
-    ).sort(compareAppointments);
-
-    const saved = await saveAppointments(updatedAppointments);
-
-    if (!saved) {
-      // Don't leave a reminder for an appointment that wasn't saved.
-      if (newNotificationId && newNotificationId !== oldNotificationId) {
-        await cancelAppointmentReminder(newNotificationId);
-      }
-
-      return;
-    }
-
-    // The old reminder is replaced when the date or time changed.
+    // The old reminder is replaced when the date, time or pet changed.
     if (oldNotificationId && oldNotificationId !== newNotificationId) {
       await cancelAppointmentReminder(oldNotificationId);
     }
+
+    if (existing && existing.id !== appointmentId) {
+      await dataApi.rememberNotificationId('appointment', existing.id, null);
+    }
+
+    await dataApi.rememberNotificationId(
+      'appointment',
+      appointmentId,
+      newNotificationId
+    );
+
+    const appointment = { ...saved, notificationId: newNotificationId };
+
+    setAppointments(
+      [
+        ...appointments.filter(
+          (item) =>
+            item.id !== appointmentId && (!existing || item.id !== existing.id)
+        ),
+        appointment,
+      ].sort(compareAppointments)
+    );
 
     setAppointmentForm({ ...EMPTY_APPOINTMENT_FORM });
     setEditingAppointmentId(null);
@@ -681,17 +765,27 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       confirmLabel: 'Cancel appointment',
       cancelLabel: 'Keep it',
       onConfirm: async () => {
-        const updatedAppointments = appointments.map((item) =>
-          item.id === appointment.id
-            ? { ...item, status: 'Cancelled', notificationId: null }
-            : item
+        try {
+          await dataApi.cancelAppointment(appointment);
+        } catch (error) {
+          notify('Could not cancel appointment', error.message);
+          return;
+        }
+
+        setAppointments((previous) =>
+          previous.map((item) =>
+            item.id === appointment.id
+              ? { ...item, status: 'Cancelled', notificationId: null }
+              : item
+          )
         );
 
-        const saved = await saveAppointments(updatedAppointments);
-
-        if (saved) {
-          await cancelAppointmentReminder(appointment.notificationId);
-        }
+        await cancelAppointmentReminder(appointment.notificationId);
+        await dataApi.rememberNotificationId(
+          'appointment',
+          appointment.id,
+          null
+        );
       },
     });
   }
@@ -703,13 +797,23 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       message: `Delete ${appointment.petName}’s visit to ${appointment.clinicName} on ${appointment.date}? This cannot be undone.`,
       confirmLabel: 'Delete',
       onConfirm: async () => {
-        const saved = await saveAppointments(
-          appointments.filter((item) => item.id !== appointment.id)
+        try {
+          await dataApi.deleteAppointment(appointment);
+        } catch (error) {
+          notify('Could not delete appointment', error.message);
+          return;
+        }
+
+        setAppointments((previous) =>
+          previous.filter((item) => item.id !== appointment.id)
         );
 
-        if (saved) {
-          await cancelAppointmentReminder(appointment.notificationId);
-        }
+        await cancelAppointmentReminder(appointment.notificationId);
+        await dataApi.rememberNotificationId(
+          'appointment',
+          appointment.id,
+          null
+        );
       },
     });
   }
@@ -762,6 +866,10 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   function savePet() {
+    return runGuarded(performSavePet);
+  }
+
+  async function performSavePet() {
     if (!petForm.name.trim() || !petForm.species.trim()) {
       Alert.alert(
         'Missing information',
@@ -781,38 +889,44 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       return;
     }
 
-    if (editingPetId) {
-      setPets((previous) =>
-        previous.map((pet) =>
-          pet.id === editingPetId
-            ? {
-                ...pet,
-                ...petForm,
-                name: petForm.name.trim(),
-                species: petForm.species.trim(),
-              }
-            : pet
-        )
-      );
+    try {
+      if (editingPetId) {
+        const updated = await dataApi.updatePet(editingPetId, petForm);
 
-      setSelectedPetId(editingPetId);
+        setPets((previous) =>
+          previous.map((pet) =>
+            pet.id === editingPetId
+              ? {
+                  ...updated,
+                  healthRecords: pet.healthRecords,
+                  vaccinations: pet.vaccinations,
+                }
+              : pet
+          )
+        );
+
+        setAppointments((previous) =>
+          previous.map((item) =>
+            item.petId === editingPetId
+              ? { ...item, petName: updated.name }
+              : item
+          )
+        );
+
+        setSelectedPetId(editingPetId);
+        setScreen('profile');
+        return;
+      }
+
+      const newPet = await dataApi.createPet(petForm);
+
+      setPets((previous) => [...previous, newPet]);
+      setSelectedPetId(newPet.id);
+      setPetForm({ ...EMPTY_PET_FORM });
       setScreen('profile');
-      return;
+    } catch (error) {
+      notify('Could not save pet', error.message);
     }
-
-    const newPet = normalizePet({
-      ...petForm,
-      id: createId(),
-      name: petForm.name.trim(),
-      species: petForm.species.trim(),
-      healthRecords: [],
-      vaccinations: [],
-    });
-
-    setPets((previous) => [...previous, newPet]);
-    setSelectedPetId(newPet.id);
-    setPetForm({ ...EMPTY_PET_FORM });
-    setScreen('profile');
   }
 
   function openProfile(pet) {
@@ -821,45 +935,45 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   function deletePet(petId) {
-    Alert.alert(
-      'Delete pet',
-      'Are you sure you want to delete this pet and its associated records and appointments?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const petToDelete = pets.find((pet) => pet.id === petId);
+    confirmAction({
+      title: 'Delete pet',
+      message:
+        'Are you sure you want to delete this pet and its associated records and appointments?',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          // The server also deletes the pet's records and appointments.
+          await dataApi.deletePet(petId);
+        } catch (error) {
+          notify('Could not delete pet', error.message);
+          return;
+        }
 
-            // Cancel every saved vaccination reminder for this pet.
-            await cancelPetVaccinationReminders(petToDelete);
+        const petToDelete = pets.find((pet) => pet.id === petId);
 
-            // Remove this pet's appointments and their reminders.
-            const petAppointments = appointments.filter(
-              (item) => item.petId === petId
-            );
+        // Cancel every saved vaccination reminder for this pet.
+        await cancelPetVaccinationReminders(petToDelete);
 
-            if (petAppointments.length > 0) {
-              await cancelAppointmentReminders(petAppointments);
-              await saveAppointments(
-                appointments.filter((item) => item.petId !== petId)
-              );
-            }
+        // Remove this pet's appointments and their reminders.
+        const petAppointments = appointments.filter(
+          (item) => item.petId === petId
+        );
 
-            setPets((previous) =>
-              previous.filter((pet) => pet.id !== petId)
-            );
+        await cancelAppointmentReminders(petAppointments);
 
-            if (selectedPetId === petId) {
-              setSelectedPetId(null);
-            }
+        setAppointments((previous) =>
+          previous.filter((item) => item.petId !== petId)
+        );
 
-            setScreen('home');
-          },
-        },
-      ]
-    );
+        setPets((previous) => previous.filter((pet) => pet.id !== petId));
+
+        if (selectedPetId === petId) {
+          setSelectedPetId(null);
+        }
+
+        setScreen('home');
+      },
+    });
   }
 
   function openHealthRecords(pet) {
@@ -891,6 +1005,10 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   function saveHealthRecord() {
+    return runGuarded(performSaveHealthRecord);
+  }
+
+  async function performSaveHealthRecord() {
     if (!selectedPet) {
       Alert.alert('Error', 'Please select a pet first.');
       return;
@@ -915,12 +1033,18 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       return;
     }
 
-    const record = {
-      id: selectedRecordId || createId(),
-      ...healthForm,
-      date: healthForm.date.trim(),
-      reason: healthForm.reason.trim(),
-    };
+    let record;
+
+    try {
+      record = await dataApi.saveHealthRecord(
+        selectedPetId,
+        selectedRecordId,
+        healthForm
+      );
+    } catch (error) {
+      notify('Could not save health record', error.message);
+      return;
+    }
 
     setPets((previous) =>
       previous.map((pet) => {
@@ -952,31 +1076,32 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   function deleteHealthRecord(recordId) {
-    Alert.alert(
-      'Delete health record',
-      'Are you sure you want to delete this medical record?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setPets((previous) =>
-              previous.map((pet) =>
-                pet.id === selectedPetId
-                  ? {
-                      ...pet,
-                      healthRecords: pet.healthRecords.filter(
-                        (record) => record.id !== recordId
-                      ),
-                    }
-                  : pet
-              )
-            );
-          },
-        },
-      ]
-    );
+    confirmAction({
+      title: 'Delete health record',
+      message: 'Are you sure you want to delete this medical record?',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await dataApi.deleteHealthRecord(selectedPetId, recordId);
+        } catch (error) {
+          notify('Could not delete health record', error.message);
+          return;
+        }
+
+        setPets((previous) =>
+          previous.map((pet) =>
+            pet.id === selectedPetId
+              ? {
+                  ...pet,
+                  healthRecords: pet.healthRecords.filter(
+                    (record) => record.id !== recordId
+                  ),
+                }
+              : pet
+          )
+        );
+      },
+    });
   }
 
   function openVaccinations(pet) {
@@ -1005,7 +1130,11 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     setScreen('editVaccination');
   }
 
-  async function saveVaccination() {
+  function saveVaccination() {
+    return runGuarded(performSaveVaccination);
+  }
+
+  async function performSaveVaccination() {
     if (!selectedPet) {
       Alert.alert('Error', 'Please select a pet first.');
       return;
@@ -1064,7 +1193,27 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
         )
       : null;
 
-    const vaccinationId = selectedVaccinationId || createId();
+    // Save on the server first: its ID is needed for the reminder.
+    let savedVaccination;
+
+    try {
+      savedVaccination = await dataApi.saveVaccination(
+        selectedPetId,
+        selectedVaccinationId,
+        {
+          vaccineName,
+          dateGiven,
+          nextDueDate,
+          veterinarian: vaccinationForm.veterinarian.trim(),
+          notes: vaccinationForm.notes.trim(),
+        }
+      );
+    } catch (error) {
+      notify('Could not save vaccination', error.message);
+      return;
+    }
+
+    const vaccinationId = savedVaccination.id;
 
     const oldNotificationId =
       existingVaccination?.notificationId || null;
@@ -1110,13 +1259,14 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
       await cancelVaccinationReminder(oldNotificationId);
     }
 
+    await dataApi.rememberNotificationId(
+      'vaccination',
+      vaccinationId,
+      newNotificationId
+    );
+
     const vaccination = {
-      id: vaccinationId,
-      vaccineName,
-      dateGiven,
-      nextDueDate,
-      veterinarian: vaccinationForm.veterinarian.trim(),
-      notes: vaccinationForm.notes.trim(),
+      ...savedVaccination,
       notificationId: newNotificationId,
     };
 
@@ -1152,42 +1302,47 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
   }
 
   function deleteVaccination(vaccinationId) {
-    Alert.alert(
-      'Delete vaccination',
-      'Are you sure you want to delete this vaccination record?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const pet = pets.find((item) => item.id === selectedPetId);
-            const vaccination = pet?.vaccinations?.find(
-              (item) => item.id === vaccinationId
-            );
+    confirmAction({
+      title: 'Delete vaccination',
+      message: 'Are you sure you want to delete this vaccination record?',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        const pet = pets.find((item) => item.id === selectedPetId);
+        const vaccination = pet?.vaccinations?.find(
+          (item) => item.id === vaccinationId
+        );
 
-            if (vaccination?.notificationId) {
-              await cancelVaccinationReminder(
-                vaccination.notificationId
-              );
-            }
+        try {
+          await dataApi.deleteVaccination(selectedPetId, vaccinationId);
+        } catch (error) {
+          notify('Could not delete vaccination', error.message);
+          return;
+        }
 
-            setPets((previous) =>
-              previous.map((pet) =>
-                pet.id === selectedPetId
-                  ? {
-                      ...pet,
-                      vaccinations: pet.vaccinations.filter(
-                        (item) => item.id !== vaccinationId
-                      ),
-                    }
-                  : pet
-              )
-            );
-          },
-        },
-      ]
-    );
+        if (vaccination?.notificationId) {
+          await cancelVaccinationReminder(vaccination.notificationId);
+        }
+
+        await dataApi.rememberNotificationId(
+          'vaccination',
+          vaccinationId,
+          null
+        );
+
+        setPets((previous) =>
+          previous.map((item) =>
+            item.id === selectedPetId
+              ? {
+                  ...item,
+                  vaccinations: item.vaccinations.filter(
+                    (entry) => entry.id !== vaccinationId
+                  ),
+                }
+              : item
+          )
+        );
+      },
+    });
   }
 
   function getAllVaccinationReminders() {
@@ -1225,54 +1380,37 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
 
   // ---- Settings actions ----
 
-  function restoreSamplePet() {
-    Alert.alert(
-      'Restore sample data',
-      'This replaces all your current pets and records with the sample pet. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Restore',
-          style: 'destructive',
-          onPress: async () => {
-            await cancelAllVaccinationReminders(pets);
-            await cancelAppointmentReminders(appointments);
-            await saveAppointments([]);
-
-            setPets(INITIAL_PETS.map(normalizePet));
-            setSelectedPetId(null);
-            setSelectedRecordId(null);
-            setSelectedVaccinationId(null);
-            setScreen('home');
-          },
-        },
-      ]
-    );
-  }
-
   function clearAllData() {
-    Alert.alert(
-      'Clear all data',
-      'This permanently deletes every pet, medical record, vaccination, and appointment saved on this device.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear everything',
-          style: 'destructive',
-          onPress: async () => {
-            await cancelAllVaccinationReminders(pets);
-            await cancelAppointmentReminders(appointments);
-            await saveAppointments([]);
+    confirmAction({
+      title: 'Delete all my data',
+      message:
+        'This permanently deletes every pet, medical record, vaccination, and appointment in your Sisu account.',
+      confirmLabel: 'Delete everything',
+      onConfirm: async () => {
+        try {
+          for (const pet of pets) {
+            await dataApi.deletePet(pet.id);
+          }
+        } catch (error) {
+          notify('Could not delete everything', error.message);
 
-            setPets([]);
-            setSelectedPetId(null);
-            setSelectedRecordId(null);
-            setSelectedVaccinationId(null);
-            setScreen('home');
-          },
-        },
-      ]
-    );
+          // Show what is left on the server.
+          retryLoad();
+          return;
+        }
+
+        await cancelAllVaccinationReminders(pets);
+        await cancelAppointmentReminders(appointments);
+        await dataApi.clearNotificationIds();
+
+        setPets([]);
+        setAppointments([]);
+        setSelectedPetId(null);
+        setSelectedRecordId(null);
+        setSelectedVaccinationId(null);
+        setScreen('home');
+      },
+    });
   }
 
   function renderButton(
@@ -2601,7 +2739,13 @@ async function openClinicDirections(clinic) {
       title: 'Sign out?',
       message: 'You will need to sign in again to use Sisu.',
       confirmLabel: 'Sign out',
-      onConfirm: onSignOut,
+      onConfirm: async () => {
+        // Reminders belong to this account; they are restored on next sign-in.
+        await cancelAllVaccinationReminders(pets);
+        await cancelAppointmentReminders(appointments);
+        await dataApi.clearNotificationIds();
+        onSignOut();
+      },
     });
   }
 
@@ -2640,18 +2784,20 @@ async function openClinicDirections(clinic) {
             Vaccinations: {totalVaccinations}
           </Text>
           <Text style={styles.helperText}>
-            Everything is stored locally on this device.
+            Your data is saved in your Sisu account.
           </Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Data management</Text>
-          {renderButton(
-            'Restore sample pet',
-            restoreSamplePet,
-            'secondary'
-          )}
-          {renderButton('Clear all data', clearAllData, 'danger')}
+          {legacyCounts.total > 0
+            ? renderButton(
+                'Move data saved on this phone',
+                importLocalData,
+                'secondary'
+              )
+            : null}
+          {renderButton('Delete all my data', clearAllData, 'danger')}
         </View>
 
         <View style={styles.card}>
@@ -2712,6 +2858,21 @@ async function openClinicDirections(clinic) {
       <SafeAreaView style={styles.loadingScreen}>
         <StatusBar barStyle="dark-content" />
         <LoadingIndicator />
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
+        <View style={styles.screenContainer}>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            {renderHeader('Could not load your data', loadError)}
+            {renderButton('Try again', retryLoad)}
+            {renderButton('Sign out', onSignOut, 'secondary')}
+          </ScrollView>
+        </View>
       </SafeAreaView>
     );
   }
