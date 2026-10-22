@@ -105,4 +105,37 @@ router.post('/pets/:petId/request', protect, requireApprovedVet, async (req, res
   }
 });
 
+// An approved veterinarian views their own access requests and their status.
+// A pet's name is only shown once the owner has approved access.
+router.get('/requests', protect, requireApprovedVet, async (req, res) => {
+  try {
+    const records = await VetPetAccess.find({
+      veterinarian: req.user.userId,
+    })
+      .populate('pet', 'name species')
+      .sort({ requestedAt: -1 });
+
+    const requests = records.map((record) => {
+      const pet = record.pet && typeof record.pet === 'object' ? record.pet : null;
+      const petId = pet ? pet._id : record.pet;
+
+      return {
+        id: record._id,
+        petId,
+        petName: record.status === 'approved' && pet ? pet.name : null,
+        status: record.status,
+        requestedAt: record.requestedAt,
+      };
+    });
+
+    return res.status(200).json({ requests });
+  } catch (error) {
+    console.error('Vet access request list error:', error.message);
+
+    return res.status(500).json({
+      message: 'Unable to retrieve your access requests.',
+    });
+  }
+});
+
 module.exports = router;
