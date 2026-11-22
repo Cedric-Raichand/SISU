@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import KeyboardAwareScrollView from '../common/KeyboardAwareScrollView';
 import AppHeader from '../common/AppHeader';
 import AppButton from '../common/AppButton';
 import AppInput from '../common/AppInput';
@@ -207,7 +208,7 @@ export default function VetPatientScreen({
     );
 
     return (
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <AppHeader
           title={`${form.editing ? 'Edit' : 'Add'} ${
             form.kind === 'record' ? 'health record' : 'vaccination'
@@ -241,7 +242,7 @@ export default function VetPatientScreen({
           <AppButton label={saving ? 'Saving...' : 'Save'} onPress={save} disabled={saving} />
           <AppButton label="Cancel" variant="secondary" onPress={() => setForm(null)} disabled={saving} />
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -268,7 +269,7 @@ export default function VetPatientScreen({
     ) : null;
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.content}>
       <Pressable onPress={onBack}>
         <Text style={styles.back}>‹ All patients</Text>
       </Pressable>
@@ -361,7 +362,7 @@ export default function VetPatientScreen({
           ))
         )
       ) : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
