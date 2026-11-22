@@ -5,6 +5,7 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
+import { shadow, pressed } from '../../theme';
 
 export default function PetCard({
   pet,
@@ -13,7 +14,11 @@ export default function PetCard({
 }) {
   return (
     <Pressable
-      style={styles.petCard}
+      style={({ pressed: isPressed }) => [
+        styles.petCard,
+        shadow.card,
+        isPressed && pressed,
+      ]}
       onPress={onPress}
     >
       <View style={styles.petCardEmoji}>
