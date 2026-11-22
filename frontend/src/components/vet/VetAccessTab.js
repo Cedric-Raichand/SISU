@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import KeyboardAwareScrollView from '../common/KeyboardAwareScrollView';
 import AppHeader from '../common/AppHeader';
 import AppButton from '../common/AppButton';
 import AppInput from '../common/AppInput';
@@ -64,7 +65,7 @@ export default function VetAccessTab({ requests, onChanged, notify }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.content}>
       <AppHeader
         title="Request access"
         subtitle="Ask a pet owner for permission to see their pet's records and add your own."
@@ -118,7 +119,7 @@ export default function VetAccessTab({ requests, onChanged, notify }) {
           </View>
         ))
       )}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
