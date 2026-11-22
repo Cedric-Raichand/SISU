@@ -3,6 +3,11 @@ import Constants from 'expo-constants';
 
 const API_PORT = 5000;
 
+// Used by release builds and over-the-air updates when EXPO_PUBLIC_API_URL was
+// not set while the app was built or published, so an update can never point
+// installed phones at a development address.
+const PRODUCTION_API_URL = 'https://sisu-api.onrender.com';
+
 // Where the Sisu backend lives.
 //
 // 1. EXPO_PUBLIC_API_URL wins if set (use it for a deployed server, e.g.
@@ -11,11 +16,16 @@ const API_PORT = 5000;
 //    known (it is the one serving the app), so we reuse it with the API port.
 // 3. On web, the backend is on localhost.
 // 4. The Android emulator reaches the host machine through 10.0.2.2.
+// Release builds (not development) fall back to the live server instead of 2-4.
 function resolveApiUrl() {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
 
   if (fromEnv) {
     return fromEnv.replace(/\/+$/, '');
+  }
+
+  if (!__DEV__) {
+    return PRODUCTION_API_URL;
   }
 
   if (Platform.OS === 'web') {
