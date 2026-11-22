@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  Image,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
 } from 'react-native';
+import { colors, radius, shadow } from '../../theme';
+import KeyboardAwareScrollView from '../common/KeyboardAwareScrollView';
 import AppInput from '../common/AppInput';
 import AppButton from '../common/AppButton';
 import AppHeader from '../common/AppHeader';
@@ -43,6 +43,10 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
 
   const copy = MODES[mode];
   const needsName = mode !== 'login';
@@ -122,15 +126,23 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
   }
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.brand}>🐾 Sisu</Text>
+      <>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logo}
+            accessibilityLabel="Sisu logo"
+          />
+
+          <View>
+            <Text style={styles.brand}>Sisu</Text>
+            <Text style={styles.tagline}>Care for every paw</Text>
+          </View>
+        </View>
 
         <AppHeader title={copy.title} subtitle={copy.subtitle} />
 
@@ -148,10 +160,13 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
               onChangeText={setName}
               placeholder="Your name"
               autoComplete="name"
+              returnKeyType="next"
+              onSubmitEditing={() => emailRef.current?.focus()}
             />
           ) : null}
 
           <AppInput
+            ref={emailRef}
             label="Email"
             value={email}
             onChangeText={setEmail}
@@ -160,9 +175,12 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="email"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
 
           <AppInput
+            ref={passwordRef}
             label="Password"
             value={password}
             onChangeText={setPassword}
@@ -171,10 +189,15 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete={needsName ? 'new-password' : 'current-password'}
+            returnKeyType={needsName ? 'next' : 'go'}
+            onSubmitEditing={
+              needsName ? () => confirmRef.current?.focus() : handleSubmit
+            }
           />
 
           {needsName ? (
             <AppInput
+              ref={confirmRef}
               label="Confirm password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -183,6 +206,8 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="new-password"
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
             />
           ) : null}
 
@@ -227,8 +252,8 @@ export default function AuthScreen({ onSignIn, onSignUp, onApplyAsVet }) {
             </>
           )}
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -242,18 +267,35 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 22,
+  },
+  logo: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    marginRight: 14,
+  },
   brand: {
-    fontSize: 18,
+    fontSize: 26,
     fontWeight: '800',
-    color: '#16856B',
-    marginBottom: 14,
+    color: colors.brandDark,
+    letterSpacing: 0.3,
+  },
+  tagline: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 1,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#E4E7EC',
+    borderColor: colors.border,
+    ...shadow.card,
   },
   error: {
     color: '#B42318',
