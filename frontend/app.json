@@ -2,11 +2,20 @@
   "expo": {
     "name": "Sisu",
     "slug": "Sisu",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#16856B",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 320,
+          "resizeMode": "contain"
+        }
+      ],
       "expo-notifications",
       [
         "expo-location",
@@ -21,7 +30,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#16856B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -35,6 +44,13 @@
       "eas": {
         "projectId": "0ba8e484-b335-424b-80b2-3eee665e51ec"
       }
+    },
+    "backgroundColor": "#F5F8F7",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0ba8e484-b335-424b-80b2-3eee665e51ec"
     }
   }
 }
