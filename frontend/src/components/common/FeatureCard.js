@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   Pressable,
@@ -6,6 +5,7 @@ import {
   View,
   StyleSheet,
 } from 'react-native';
+import { shadow, pressed } from '../../theme';
 
 export default function FeatureCard({
   emoji,
@@ -15,7 +15,11 @@ export default function FeatureCard({
 }) {
   return (
     <Pressable
-      style={styles.featureCard}
+      style={({ pressed: isPressed }) => [
+        styles.featureCard,
+        shadow.card,
+        isPressed && pressed,
+      ]}
       onPress={onPress}
     >
       <Text style={styles.featureEmoji}>{emoji}</Text>
