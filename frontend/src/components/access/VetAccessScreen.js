@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import KeyboardAwareScrollView from '../common/KeyboardAwareScrollView';
 import AppHeader from '../common/AppHeader';
 import AppButton from '../common/AppButton';
 import * as dataApi from '../../services/dataApi';
@@ -78,7 +79,7 @@ export default function VetAccessScreen({ pets, confirm, notify }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.content}>
       <AppHeader
         title="Veterinarian access"
         subtitle="Choose which veterinarians can see and add to your pets' health records."
@@ -183,7 +184,7 @@ export default function VetAccessScreen({ pets, confirm, notify }) {
           <AppButton label="Refresh" variant="secondary" onPress={load} />
         </>
       ) : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
