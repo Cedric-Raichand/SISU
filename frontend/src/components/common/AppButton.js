@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
+import { colors, radius, shadow, pressed } from '../../theme';
 
 export default function AppButton({
   label,
@@ -13,16 +14,20 @@ export default function AppButton({
   disabled = false,
 }) {
   const isSecondary = variant === 'secondary';
+  const isDanger = variant === 'danger';
 
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
       accessibilityState={{ disabled }}
-      style={[
+      style={({ pressed: isPressed }) => [
         styles.button,
         isSecondary && styles.secondaryButton,
-        variant === 'danger' && styles.dangerButton,
+        isDanger && styles.dangerButton,
+        !isSecondary && !disabled && shadow.card,
+        isPressed && !disabled && pressed,
         disabled && styles.disabledButton,
         style,
       ]}
@@ -41,31 +46,32 @@ export default function AppButton({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 47,
-    paddingHorizontal: 16,
+    minHeight: 50,
+    paddingHorizontal: 18,
     paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#16856B',
+    borderRadius: radius.md,
+    backgroundColor: colors.brand,
     marginTop: 10,
   },
   buttonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+    color: colors.white,
+    fontSize: 15,
     fontWeight: '700',
     textAlign: 'center',
+    letterSpacing: 0.2,
   },
   secondaryButton: {
-    backgroundColor: '#E8F5F0',
+    backgroundColor: colors.brandTint,
     borderWidth: 1,
-    borderColor: '#C5E5D8',
+    borderColor: colors.brandBorder,
   },
   secondaryButtonText: {
-    color: '#126B58',
+    color: colors.brandDark,
   },
   dangerButton: {
-    backgroundColor: '#B42318',
+    backgroundColor: colors.danger,
   },
   disabledButton: {
     opacity: 0.55,
