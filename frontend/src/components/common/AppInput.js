@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { forwardRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
 } from 'react-native';
+import { requestKeyboardAdjust } from './KeyboardAwareScrollView';
+import { colors, radius } from '../../theme';
 
-export default function AppInput({
+const AppInput = forwardRef(function AppInput({
   label,
   value,
   onChangeText,
@@ -17,15 +19,23 @@ export default function AppInput({
   autoCapitalize,
   autoCorrect,
   autoComplete,
-}) {
+  returnKeyType,
+  onSubmitEditing,
+}, ref) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
+      <Text style={[styles.inputLabel, focused && styles.inputLabelFocused]}>
+        {label}
+      </Text>
 
       <TextInput
+        ref={ref}
         style={[
           styles.input,
           multiline && styles.multilineInput,
+          focused && styles.inputFocused,
         ]}
         value={value == null ? '' : String(value)}
         onChangeText={onChangeText}
@@ -37,11 +47,21 @@ export default function AppInput({
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
         autoComplete={autoComplete}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
+        submitBehavior={!multiline && onSubmitEditing ? 'submit' : undefined}
+        onFocus={() => {
+          setFocused(true);
+          requestKeyboardAdjust();
+        }}
+        onBlur={() => setFocused(false)}
         textAlignVertical={multiline ? 'top' : 'center'}
       />
     </View>
   );
-}
+});
+
+export default AppInput;
 
 const styles = StyleSheet.create({
   inputGroup: {
@@ -53,16 +73,23 @@ const styles = StyleSheet.create({
     color: '#344054',
     marginBottom: 7,
   },
+  inputLabelFocused: {
+    color: colors.brandDark,
+  },
   input: {
     minHeight: 47,
     paddingHorizontal: 13,
     paddingVertical: 11,
     borderWidth: 1,
-    borderColor: '#D0D5DD',
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.inputBorder,
+    borderRadius: radius.sm,
+    backgroundColor: '#FCFDFD',
     color: '#101828',
-    fontSize: 14,
+    fontSize: 15,
+  },
+  inputFocused: {
+    borderColor: colors.brand,
+    backgroundColor: colors.white,
   },
   multilineInput: {
     minHeight: 100,
