@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   SafeAreaView,
-  ScrollView,
   View,
   Text,
   StyleSheet,
@@ -9,9 +8,13 @@ import {
   Pressable,
   Alert,
   Linking,
+  Image,
   TextInput,
   Platform,
 } from 'react-native';
+import KeyboardAwareScrollView, {
+  requestKeyboardAdjust,
+} from './src/components/common/KeyboardAwareScrollView';
 import FeatureCard from './src/components/common/FeatureCard';
 import ProfileDetail from './src/components/pets/ProfileDetail';
 import RecordDetail from './src/components/health/RecordDetail';
@@ -21,6 +24,10 @@ import AppButton from './src/components/common/AppButton';
 import AppInput from './src/components/common/AppInput';
 import AppHeader from './src/components/common/AppHeader';
 import LoadingIndicator from './src/components/common/LoadingIndicator';
+import BrandedLoading from './src/components/common/BrandedLoading';
+import FadeInView from './src/components/common/FadeInView';
+import UpdatePrompt from './src/components/common/UpdatePrompt';
+import { colors, radius, shadow } from './src/theme';
 import VaccinationCard from './src/components/health/VaccinationCard';
 import * as Location from 'expo-location';
 import * as dataApi from './src/services/dataApi';
@@ -1510,7 +1517,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     const editing = screen === 'editPet';
 
     return (
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
@@ -1555,7 +1562,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
             'secondary'
           )}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1570,7 +1577,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     }
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader('Pet Profile', 'Your companion’s details')}
 
         <View style={styles.profileHero}>
@@ -1652,7 +1659,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
           () => setScreen('pets'),
           'secondary'
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1671,7 +1678,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     );
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           `${selectedPet.name}’s Medical History`,
           'Appointments, diagnoses, treatments, and medications.'
@@ -1742,7 +1749,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
           () => setScreen('profile'),
           'secondary'
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1750,7 +1757,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     const editing = screen === 'editHealthRecord';
 
     return (
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
@@ -1805,7 +1812,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
             'secondary'
           )}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1828,7 +1835,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     );
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           `${selectedPet.name}’s Vaccinations`,
           'Keep a record of vaccines and their next due dates.'
@@ -1880,7 +1887,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
           () => setScreen('profile'),
           'secondary'
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1888,7 +1895,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     const editing = screen === 'editVaccination';
 
     return (
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
@@ -1947,7 +1954,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
             'secondary'
           )}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1959,7 +1966,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
     );
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.hero}>
           <Text style={styles.brandName}>Sisu 🐾</Text>
           <Text style={styles.heroTitle}>
@@ -2099,7 +2106,7 @@ const [clinicSearchLocation, setClinicSearchLocation] = useState(null);
         <Text style={styles.footerText}>
           Sisu · Care for every paw 🐾
         </Text>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -2261,7 +2268,7 @@ async function openClinicDirections(clinic) {
     const editing = Boolean(editingAppointmentId);
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           editing ? 'Edit Appointment' : 'Book an Appointment',
           editing
@@ -2298,6 +2305,7 @@ async function openClinicDirections(clinic) {
 
           <TextInput
             style={styles.input}
+            onFocus={requestKeyboardAdjust}
             value={appointmentForm.clinicName}
             onChangeText={(value) =>
               updateAppointmentForm('clinicName', value)
@@ -2308,6 +2316,7 @@ async function openClinicDirections(clinic) {
           <Text style={styles.sectionTitle}>Date</Text>
           <TextInput
             style={styles.input}
+            onFocus={requestKeyboardAdjust}
             value={appointmentForm.date}
             onChangeText={(value) =>
               updateAppointmentForm('date', value)
@@ -2318,6 +2327,7 @@ async function openClinicDirections(clinic) {
           <Text style={styles.sectionTitle}>Time</Text>
           <TextInput
             style={styles.input}
+            onFocus={requestKeyboardAdjust}
             value={appointmentForm.time}
             onChangeText={(value) =>
               updateAppointmentForm('time', value)
@@ -2333,6 +2343,7 @@ async function openClinicDirections(clinic) {
           <Text style={styles.sectionTitle}>Reason for visit</Text>
           <TextInput
             style={styles.input}
+            onFocus={requestKeyboardAdjust}
             value={appointmentForm.reason}
             onChangeText={(value) =>
               updateAppointmentForm('reason', value)
@@ -2354,7 +2365,7 @@ async function openClinicDirections(clinic) {
             'secondary'
           )}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -2448,7 +2459,7 @@ async function openClinicDirections(clinic) {
       .sort((a, b) => compareAppointments(b, a));
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           'My Appointments',
           'View and manage your veterinary visits.'
@@ -2503,13 +2514,13 @@ async function openClinicDirections(clinic) {
           () => setScreen('veterinarians'),
           'secondary'
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
   function renderVeterinarians() {
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
       {renderHeader(
         'Find a Veterinarian',
         'Discover veterinary care near you.'
@@ -2638,7 +2649,7 @@ async function openClinicDirections(clinic) {
           'secondary'
         )}
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -2646,7 +2657,7 @@ async function openClinicDirections(clinic) {
 
   function renderMyPets() {
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           'My Pets',
           'Tap a pet to see their profile, records, and vaccinations.'
@@ -2672,7 +2683,7 @@ async function openClinicDirections(clinic) {
             />
           ))
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -2710,7 +2721,7 @@ async function openClinicDirections(clinic) {
     const upcoming = reminders.filter((i) => i.status === 'Upcoming');
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader(
           'Reminders',
           'Vaccination due dates across all your pets.'
@@ -2740,7 +2751,7 @@ async function openClinicDirections(clinic) {
             {renderReminderGroup('Upcoming', upcoming)}
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -2770,7 +2781,7 @@ async function openClinicDirections(clinic) {
     );
 
     return (
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
         {renderHeader('Settings', 'Manage your Sisu data and app info.')}
 
         <View style={styles.card}>
@@ -2830,7 +2841,7 @@ async function openClinicDirections(clinic) {
           </Text>
           <Text style={styles.helperText}>Version 1.0.0</Text>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -2846,7 +2857,11 @@ async function openClinicDirections(clinic) {
             <Pressable
               key={item.key}
               onPress={() => setScreen(item.key)}
-              style={styles.navItem}
+              style={({ pressed: isPressed }) => [
+                styles.navItem,
+                active && styles.navItemActive,
+                isPressed && styles.navItemPressed,
+              ]}
               accessibilityRole="button"
               accessibilityLabel={item.label}
               accessibilityState={{ selected: active }}
@@ -2867,7 +2882,6 @@ async function openClinicDirections(clinic) {
               >
                 {item.label}
               </Text>
-              {active && <View style={styles.navIndicator} />}
             </Pressable>
           );
         })}
@@ -2889,11 +2903,11 @@ async function openClinicDirections(clinic) {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#F5F8F7" />
         <View style={styles.screenContainer}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
+          <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent}>
             {renderHeader('Could not load your data', loadError)}
             {renderButton('Try again', retryLoad)}
             {renderButton('Sign out', onSignOut, 'secondary')}
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
       </SafeAreaView>
     );
@@ -2980,7 +2994,12 @@ async function openClinicDirections(clinic) {
           onPress={() => setScreen('home')}
           style={styles.topBarBrand}
         >
-          <Text style={styles.topBarLogo}>🐾 Sisu</Text>
+          <Image
+            source={require('./assets/icon.png')}
+            style={styles.topBarImage}
+            accessibilityLabel="Sisu"
+          />
+          <Text style={styles.topBarLogo}>Sisu</Text>
         </Pressable>
 
         {screen !== 'home' && (
@@ -2993,7 +3012,9 @@ async function openClinicDirections(clinic) {
         )}
       </View>
 
-      <View style={styles.screenContainer}>{content}</View>
+      <View style={styles.screenContainer}>
+        <FadeInView key={screen}>{content}</FadeInView>
+      </View>
 
       {showBottomNav && renderBottomNav()}
     </SafeAreaView>
@@ -3011,6 +3032,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  brandedScreen: {
+    flex: 1,
+    backgroundColor: colors.brand,
+  },
 
   topBar: {
     minHeight: 58,
@@ -3018,17 +3043,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E4E7EC',
+    borderBottomColor: colors.border,
+    ...shadow.card,
   },
   topBarBrand: {
     paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  topBarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    marginRight: 10,
   },
   topBarLogo: {
-    color: '#126B58',
+    color: colors.brandDark,
     fontSize: 21,
     fontWeight: '800',
+    letterSpacing: 0.2,
   },
   homeLink: {
     paddingVertical: 8,
@@ -3055,17 +3090,25 @@ const styles = StyleSheet.create({
   // Bottom navigation
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E4E7EC',
-    paddingBottom: 6,
-    paddingTop: 6,
+    backgroundColor: colors.surface,
+    paddingBottom: 8,
+    paddingTop: 8,
+    paddingHorizontal: 6,
+    ...shadow.nav,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: 7,
+    marginHorizontal: 3,
+    borderRadius: radius.md,
+  },
+  navItemActive: {
+    backgroundColor: colors.brandTint,
+  },
+  navItemPressed: {
+    opacity: 0.8,
   },
   navEmoji: {
     fontSize: 22,
@@ -3083,18 +3126,11 @@ const styles = StyleSheet.create({
     color: '#126B58',
     fontWeight: '800',
   },
-  navIndicator: {
-    marginTop: 4,
-    width: 18,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#126B58',
-  },
 
   hero: {
     backgroundColor: '#E1F3EB',
     padding: 24,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     marginBottom: 18,
   },
   brandName: {
@@ -3127,11 +3163,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingVertical: 17,
     paddingHorizontal: 8,
-    borderRadius: 14,
+    borderRadius: radius.md,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E7EEEA',
+    ...shadow.card,
   },
   statNumber: {
     fontSize: 24,
@@ -3163,17 +3200,18 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E7EEEA',
+    ...shadow.card,
   },
 
   input: {
     borderWidth: 1,
     borderColor: '#D0D5DD',
-    borderRadius: 10,
+    borderRadius: radius.sm,
     paddingVertical: 12,
     paddingHorizontal: 14,
     fontSize: 15,
@@ -3221,18 +3259,20 @@ const styles = StyleSheet.create({
   recordCard: {
     padding: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+    borderRadius: radius.lg,
     marginBottom: 13,
     borderWidth: 1,
     borderColor: '#E7EEEA',
+    ...shadow.card,
   },
   vaccinationCard: {
     padding: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+    borderRadius: radius.lg,
     marginBottom: 13,
     borderWidth: 1,
     borderColor: '#D6EAE1',
+    ...shadow.card,
   },
   recordHeader: {
     marginBottom: 12,
@@ -3274,10 +3314,11 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
     paddingHorizontal: 18,
     backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+    borderRadius: radius.lg,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E7EEEA',
+    ...shadow.card,
   },
   emptyEmoji: {
     fontSize: 38,
@@ -3309,14 +3350,23 @@ const styles = StyleSheet.create({
 // Decides what to show: a loading screen while the saved login is checked,
 // the sign-in screen, a simple screen for vets and admins, or the owner app.
 export default function App() {
+  return (
+    <>
+      <AppContent />
+      <UpdatePrompt />
+    </>
+  );
+}
+
+function AppContent() {
   const session = useSession();
 
   if (session.status === 'loading') {
     return (
-      <SafeAreaView style={styles.loadingScreen}>
-        <StatusBar barStyle="dark-content" />
-        <LoadingIndicator />
-      </SafeAreaView>
+      <View style={styles.brandedScreen}>
+        <StatusBar barStyle="light-content" />
+        <BrandedLoading />
+      </View>
     );
   }
 
