@@ -172,6 +172,39 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full walkthrough. In short:
 3. Create the admin account against the live database.
 4. Set the live API URL in `frontend/eas.json` and build the app with EAS.
 
+## Updating the app
+
+Sisu uses [EAS Update](https://docs.expo.dev/eas-update/introduction/), so changes to the app's JavaScript
+(screens, styles, logic) can reach installed phones without a new APK. Changes to
+native code need a new build. The app version in `frontend/app.json` ties the two
+together: an update only reaches builds with the same version.
+
+| What changed | What to do |
+| --- | --- |
+| Screens, styles, text, app logic | Publish an update (below) |
+| A new native package, app icon, splash screen, permissions, or anything else in `app.json` that affects the native app | Bump `version` in `frontend/app.json` and build a new APK |
+
+**Publish an update** (from the `frontend` folder):
+
+```bash
+npx eas-cli update --channel preview --environment preview --message "Describe the change"
+```
+
+Installed `preview` builds download it in the background the next time the app opens.
+A small **Update ready** banner then appears, and tapping **Restart** applies it.
+
+**Build a new APK:**
+
+```bash
+npx eas-cli build -p android --profile preview
+```
+
+Each build profile has its own channel (`development`, `preview`, `production`), so an
+update published to `preview` never reaches a `production` build.
+
+Reminder: build links on Expo expire after a while, so download each APK and attach it to
+a GitHub Release for a permanent link.
+
 ## Tech stack
 
 - **Frontend:** Expo SDK 57, React Native 0.86, React 19, AsyncStorage, expo-secure-store, expo-notifications, expo-location
