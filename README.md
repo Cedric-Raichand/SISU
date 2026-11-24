@@ -17,6 +17,7 @@ Sisu is a pet-health app. Owners keep their pets' profiles and medical history i
 - Grant or revoke a vet's access to each pet individually
 
 **Veterinarians**
+
 - Apply for a vet account (approved by an admin)
 - Request access to a pet; the owner approves or rejects
 - With approved access: read the pet's history and add records. Vets can edit or delete only the records they created
